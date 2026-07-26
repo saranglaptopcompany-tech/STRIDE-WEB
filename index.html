@@ -252,8 +252,40 @@
   <!-- ===== SIGNED OUT ===== -->
   <div id="view-signedout" class="card">
     <h2>Sign in</h2>
-    <p class="lead">Sign in with the same Google account you'll use every day. If you already use the Telegram bot, this will let you link that same account to the website — nothing gets duplicated.</p>
-    <button class="btn-primary" onclick="signIn()">Continue with Google</button>
+    <div class="tabs">
+      <div class="tab active" id="tab-auth-google" onclick="switchAuthTab('google')">Google</div>
+      <div class="tab" id="tab-auth-email" onclick="switchAuthTab('email')">Email</div>
+    </div>
+
+    <div id="pane-auth-google">
+      <p class="lead">Sign in with the same Google account you'll use every day. If you already use the Telegram bot, this will let you link that same account to the website — nothing gets duplicated.</p>
+      <button class="btn-primary" onclick="signIn()">Continue with Google</button>
+    </div>
+
+    <div id="pane-auth-email" style="display:none">
+      <div class="tabs">
+        <div class="tab active" id="tab-email-signup" onclick="switchEmailAuthTab('signup')">Sign up</div>
+        <div class="tab" id="tab-email-signin" onclick="switchEmailAuthTab('signin')">Sign in</div>
+      </div>
+
+      <div id="pane-email-signup">
+        <p class="lead">New here? Enter your access code, pick a password, and you're in — no Google account needed.</p>
+        <input type="email" id="signupEmailInput" placeholder="you@example.com" autocomplete="email" />
+        <input type="password" id="signupPasswordInput" placeholder="Password (min 6 characters)" autocomplete="new-password" />
+        <input type="text" id="signupCodeInput" placeholder="ACC-8X2K1M" autocapitalize="characters" />
+        <button class="btn-primary" onclick="submitEmailSignup()">Create account</button>
+        <p class="error" id="signupError"></p>
+        <p class="muted" id="signupNotice" style="display:none;font-size:13px;margin-top:8px"></p>
+      </div>
+
+      <div id="pane-email-signin" style="display:none">
+        <p class="lead">Already made an account here with email? Sign in below.</p>
+        <input type="email" id="signinEmailInput" placeholder="you@example.com" autocomplete="email" />
+        <input type="password" id="signinPasswordInput" placeholder="Password" autocomplete="current-password" />
+        <button class="btn-primary" onclick="submitEmailSignin()">Sign in</button>
+        <p class="error" id="signinError"></p>
+      </div>
+    </div>
   </div>
 
   <!-- ===== NEEDS CODE (new signup OR linking existing telegram account) ===== -->
@@ -290,6 +322,7 @@
       </div>
       <button class="icon-btn" onclick="signOut()">Sign out</button>
     </div>
+    <p class="muted" style="text-align:right;margin:-6px 0 8px"><a href="#" onclick="openDeleteModal(); return false;" style="color:var(--red);font-size:12px">Delete account</a></p>
     <p class="muted" id="statusLine" style="margin:-8px 0 14px"></p>
     <div id="upgradeCodeRow" style="margin:-8px 0 14px">
       <a href="#" id="upgradeCodeToggle" onclick="toggleUpgradeCode(); return false;" style="font-size:12px;color:var(--paper-dim)">Have a new code? Enter it here</a>
@@ -310,14 +343,26 @@
           <input type="text" id="addGoalInput" placeholder="e.g. Get ACCA certified" style="margin-bottom:0" onkeydown="if(event.key==='Enter')addGoal()" />
           <button class="btn-ghost btn-small" style="flex:0 0 auto;width:auto" onclick="document.getElementById('goalFileInput').click()" title="Attach a document, PDF, or pasted notes">📎</button>
           <button class="btn-ghost btn-small" id="goalVoiceBtn" style="flex:0 0 auto;width:auto" onclick="toggleGoalVoice()" title="Record a voice note">🎙️</button>
-          <button class="btn-ghost btn-small" style="flex:0 0 auto;width:auto" onclick="addGoal()">Add</button>
+          <button class="btn-ghost btn-small" id="goalAddBtn" style="flex:0 0 auto;width:auto" onclick="addGoal()">Add</button>
         </div>
         <input type="file" accept=".pdf,.doc,.docx,.txt" id="goalFileInput" style="display:none" onchange="handleGoalFile()" />
         <div class="file-preview" id="goalAttachPreview"></div>
+        <p class="muted" id="goalTip" style="font-size:12px;margin:0 0 10px">💡 Tip: mention where you're starting from too — e.g. "Get ACCA certified, currently mid-way through F3" — for a more tailored plan.</p>
+        <p class="error" id="goalError" style="font-size:12px;margin:0 0 10px;display:none"></p>
         <div id="goalsList"></div>
       </div>
 
-      <div class="card" id="taskList"></div>
+      <div class="card">
+        <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:10px">
+          <button class="btn-ghost btn-small" style="width:auto;padding:6px 10px" onclick="shiftTaskDay(-1)" aria-label="Previous day">‹</button>
+          <span style="font-size:13px;color:var(--paper-dim)">
+            <span id="taskDateLabel">Today</span>
+            <a href="#" id="taskTodayLink" onclick="goToToday(); return false;" style="display:none;margin-left:8px;font-size:12px">Back to today</a>
+          </span>
+          <button class="btn-ghost btn-small" style="width:auto;padding:6px 10px" onclick="shiftTaskDay(1)" aria-label="Next day">›</button>
+        </div>
+        <div id="taskList"></div>
+      </div>
 
       <!-- ===== COMMAND BOX (same free-text commands as the Telegram bot) ===== -->
       <div class="card">
@@ -399,6 +444,7 @@
       </div>
       <button class="icon-btn" onclick="signOut()">Sign out</button>
     </div>
+    <p class="muted" style="text-align:right;margin:-6px 0 8px"><a href="#" onclick="openDeleteModal(); return false;" style="color:var(--red);font-size:12px">Delete account</a></p>
     <p class="muted" id="statusLineRoster" style="margin:-8px 0 14px"></p>
     <div class="card" id="rosterList"></div>
   </div>
@@ -420,6 +466,34 @@
       <div id="welcomeFeatures"></div>
       <p class="muted" id="welcomeStatus" style="margin:14px 0 4px"></p>
       <button class="btn-primary" onclick="closeWelcome()">Got it</button>
+    </div>
+  </div>
+
+  <!-- ===== DELETE ACCOUNT MODAL ===== -->
+  <!-- Two steps: (1) request a 6-digit code by email — works whether the account was
+       created with Google or with a password, since everyone has an email; (2) enter
+       the code to actually confirm and delete. Nothing is deleted until step 2 succeeds. -->
+  <div id="modal-delete" class="modal-overlay hidden">
+    <div class="modal-card">
+      <h2>Delete account</h2>
+      <div id="pane-delete-warn">
+        <p class="lead">This permanently deletes your account, tasks, goals, and history. This can't be undone.</p>
+        <p class="lead">To confirm it's really you, we'll email a 6-digit code to <b id="deleteEmailLabel"></b>.</p>
+        <p class="error" id="deleteWarnError"></p>
+        <div class="row">
+          <button class="btn-ghost btn-small" onclick="closeDeleteModal()">Cancel</button>
+          <button class="btn-primary" style="background:var(--red)" onclick="sendDeleteOtp()">Send code</button>
+        </div>
+      </div>
+      <div id="pane-delete-otp" style="display:none">
+        <p class="lead">Enter the 6-digit code we just emailed you.</p>
+        <input type="text" id="deleteOtpInput" placeholder="123456" inputmode="numeric" maxlength="6" />
+        <p class="error" id="deleteOtpError"></p>
+        <div class="row">
+          <button class="btn-ghost btn-small" onclick="closeDeleteModal()">Cancel</button>
+          <button class="btn-primary" id="deleteConfirmBtn" style="background:var(--red)" onclick="confirmDeleteAccount()">Confirm & delete</button>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -444,6 +518,7 @@
   const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
   const $ = (id) => document.getElementById(id);
+  let currentUser = null; // set in boot() from GET /me — used by the delete-account flow
   // Apply any locally-remembered theme immediately, before auth/network resolve —
   // corrected against the server value (theme_preference) once /me comes back in boot().
   {
@@ -468,6 +543,138 @@
   };
   window.signOut = async function () {
     await supabase.auth.signOut();
+    currentUser = null;
+    showOnly("view-signedout");
+  };
+
+  window.switchAuthTab = function (which) {
+    $("tab-auth-google").classList.toggle("active", which === "google");
+    $("tab-auth-email").classList.toggle("active", which === "email");
+    $("pane-auth-google").style.display = which === "google" ? "" : "none";
+    $("pane-auth-email").style.display = which === "email" ? "" : "none";
+  };
+
+  window.switchEmailAuthTab = function (which) {
+    $("tab-email-signup").classList.toggle("active", which === "signup");
+    $("tab-email-signin").classList.toggle("active", which === "signin");
+    $("pane-email-signup").style.display = which === "signup" ? "" : "none";
+    $("pane-email-signin").style.display = which === "signin" ? "" : "none";
+  };
+
+  // Email/password sign-up: creates the Supabase Auth user, then redeems the access
+  // code through the SAME /join endpoint the Google flow uses (it only cares about the
+  // signed-in user's id/email, not which provider they used). If this Supabase project
+  // requires email confirmation, signUp() comes back with no session yet — in that case
+  // we stash the code in localStorage and redeem it automatically the moment they first
+  // sign in successfully, instead of asking them to type it twice.
+  window.submitEmailSignup = async function () {
+    const email = $("signupEmailInput").value.trim();
+    const password = $("signupPasswordInput").value;
+    const code = $("signupCodeInput").value.trim();
+    const errEl = $("signupError");
+    const noticeEl = $("signupNotice");
+    errEl.textContent = "";
+    noticeEl.style.display = "none";
+
+    if (!email || !password) { errEl.textContent = "Enter an email and password."; return; }
+    if (password.length < 6) { errEl.textContent = "Password needs to be at least 6 characters."; return; }
+    if (!code) { errEl.textContent = "Enter your access code."; return; }
+
+    const { data, error } = await supabase.auth.signUp({ email, password });
+    if (error) { errEl.textContent = error.message; return; }
+
+    if (!data.session) {
+      localStorage.setItem("stride_pending_code", code);
+      noticeEl.textContent = "Check your email to confirm your account, then come back and sign in below — your code is applied automatically the moment you do.";
+      noticeEl.style.display = "block";
+      switchEmailAuthTab("signin");
+      $("signinEmailInput").value = email;
+      return;
+    }
+
+    const result = await apiCall("/join", { method: "POST", body: JSON.stringify({ code }) });
+    if (result.error) { errEl.textContent = result.error; return; }
+    await boot();
+  };
+
+  window.submitEmailSignin = async function () {
+    const email = $("signinEmailInput").value.trim();
+    const password = $("signinPasswordInput").value;
+    const errEl = $("signinError");
+    errEl.textContent = "";
+    if (!email || !password) { errEl.textContent = "Enter your email and password."; return; }
+
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) { errEl.textContent = error.message; return; }
+
+    const pendingCode = localStorage.getItem("stride_pending_code");
+    if (pendingCode) {
+      localStorage.removeItem("stride_pending_code");
+      await apiCall("/join", { method: "POST", body: JSON.stringify({ code: pendingCode }) }).catch(() => {});
+    }
+    await boot();
+  };
+
+  // ---------- Delete account (email OTP confirmation) ----------
+  // Works the same regardless of whether the account was made with Google or a
+  // password, since both always have an email on file. Step 1 emails a 6-digit code
+  // via Supabase's own OTP system (shouldCreateUser:false so it can't be used to sign
+  // up a new account by accident). Step 2 verifies that code — which also proves it's
+  // really the account owner — then calls the backend to actually delete everything.
+  window.openDeleteModal = function () {
+    if (!currentUser) return;
+    $("deleteEmailLabel").textContent = currentUser.email || "your email";
+    $("deleteWarnError").textContent = "";
+    $("deleteOtpError").textContent = "";
+    $("deleteOtpInput").value = "";
+    $("pane-delete-warn").style.display = "";
+    $("pane-delete-otp").style.display = "none";
+    $("modal-delete").classList.remove("hidden");
+  };
+
+  window.closeDeleteModal = function () {
+    $("modal-delete").classList.add("hidden");
+  };
+
+  window.sendDeleteOtp = async function () {
+    const errEl = $("deleteWarnError");
+    errEl.textContent = "";
+    if (!currentUser?.email) { errEl.textContent = "No email on file for this account."; return; }
+    const { error } = await supabase.auth.signInWithOtp({
+      email: currentUser.email,
+      options: { shouldCreateUser: false },
+    });
+    if (error) { errEl.textContent = error.message; return; }
+    $("pane-delete-warn").style.display = "none";
+    $("pane-delete-otp").style.display = "";
+  };
+
+  window.confirmDeleteAccount = async function () {
+    const code = $("deleteOtpInput").value.trim();
+    const errEl = $("deleteOtpError");
+    errEl.textContent = "";
+    if (!code) { errEl.textContent = "Enter the code from your email."; return; }
+
+    const { error: otpError } = await supabase.auth.verifyOtp({
+      email: currentUser.email, token: code, type: "email",
+    });
+    if (otpError) { errEl.textContent = "That code didn't match — check it and try again."; return; }
+
+    const btn = $("deleteConfirmBtn");
+    btn.disabled = true;
+    btn.textContent = "Deleting…";
+
+    const result = await apiCall("/delete-account", { method: "POST" });
+    if (result.error) {
+      btn.disabled = false;
+      btn.textContent = "Confirm & delete";
+      errEl.textContent = result.error;
+      return;
+    }
+
+    closeDeleteModal();
+    await supabase.auth.signOut();
+    currentUser = null;
     showOnly("view-signedout");
   };
 
@@ -519,7 +726,8 @@
     listEl.innerHTML = "";
 
     if (tasks.length === 0) {
-      listEl.innerHTML = '<p class="muted">No tasks yet for today.</p>';
+      const label = viewedTaskIsToday ? "today" : formatTaskDateLabel(viewedTaskDate, false).toLowerCase();
+      listEl.innerHTML = `<p class="muted">No tasks for ${label}.</p>`;
       return;
     }
 
@@ -831,6 +1039,52 @@
   // logic already in edge-function/index.ts (add task / delete task / /status / /help /
   // /paid etc.) so behavior matches Telegram exactly. Expects { reply: "..." } back.
   let latestTasks = [];
+  let viewedTaskDate = null;   // YYYY-MM-DD currently shown in the task card
+  let viewedTaskIsToday = true;
+
+  function formatTaskDateLabel(dateStr, isToday) {
+    if (isToday) return "Today";
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const d = new Date(dateStr + "T00:00:00");
+    const t = new Date(todayStr + "T00:00:00");
+    const diffDays = Math.round((d - t) / 86400000);
+    if (diffDays === 1) return "Tomorrow";
+    if (diffDays === -1) return "Yesterday";
+    return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+  }
+
+  // Loads a specific day's tasks via GET /today?date=..., used by the ‹ › day arrows,
+  // clicking a day in the month calendar, and "Back to today". The backend clamps out-of
+  // -range dates back to today itself and tells us via isToday/viewedDate, so we always
+  // trust what comes back rather than the date we asked for.
+  async function loadTasksForDate(dateStr) {
+    const q = dateStr ? `?date=${dateStr}` : "";
+    const data = await apiCall(`/today${q}`);
+    if (data.error) return;
+    latestTasks = data.tasks || [];
+    viewedTaskDate = data.viewedDate;
+    viewedTaskIsToday = !!data.isToday;
+    renderTasks(latestTasks);
+    renderScore(data.streak || { current: 0, longest: 0, score: 0 });
+    $("taskDateLabel").textContent = formatTaskDateLabel(viewedTaskDate, viewedTaskIsToday);
+    $("taskTodayLink").style.display = viewedTaskIsToday ? "none" : "inline";
+  }
+
+  window.shiftTaskDay = function (delta) {
+    const base = viewedTaskDate || new Date().toISOString().slice(0, 10);
+    const d = new Date(base + "T00:00:00");
+    d.setDate(d.getDate() + delta);
+    loadTasksForDate(d.toISOString().slice(0, 10)).catch(() => {});
+  };
+
+  window.goToToday = function () {
+    loadTasksForDate(new Date().toISOString().slice(0, 10)).catch(() => {});
+  };
+
+  // Clicking a day in the month calendar jumps the task card straight to that date.
+  window.viewCalendarDate = function (dateStr) {
+    loadTasksForDate(dateStr).catch(() => {});
+  };
 
   window.sendCommand = async function () {
     const input = $("commandInput");
@@ -849,10 +1103,9 @@
     }
     log.scrollTop = log.scrollHeight;
 
-    // Some commands change your data (add task, /status, etc.) — refresh the view.
-    const today = await apiCall("/today");
-    latestTasks = today.tasks || [];
-    renderTasks(latestTasks);
+    // Some commands change your data (add task, /status, etc.) — refresh whichever
+    // date is currently on screen rather than always snapping back to today.
+    loadTasksForDate(viewedTaskDate).catch(() => {});
   };
 
   // ---------- Quick photo (camera button next to the command box) ----------
@@ -891,9 +1144,7 @@
     log.scrollTop = log.scrollHeight;
     input.value = "";
 
-    const today = await apiCall("/today");
-    latestTasks = today.tasks || [];
-    renderTasks(latestTasks);
+    loadTasksForDate(viewedTaskDate).catch(() => {});
   };
 
   // ---------- Roster ----------
@@ -937,6 +1188,7 @@
 
     const me = await apiCall("/me");
     if (me.error) { showOnly("view-needscode"); return; }
+    currentUser = me.user;
 
     applyTheme(me.user.theme_preference === "light" ? "light" : "dark", false);
 
@@ -949,10 +1201,7 @@
       maybeAutoShowWelcome(me.user.account_role, me.user);
     } else {
       $("greeting").textContent = `Hi, ${me.user.name || "there"}`;
-      const today = await apiCall("/today");
-      latestTasks = today.tasks || [];
-      renderTasks(latestTasks);
-      renderScore(today.streak || { current: 0, longest: 0, score: 0 });
+      await loadTasksForDate().catch((err) => console.error("Today load failed:", err));
       loadCalendarMonth().catch((err) => console.error("Calendar load failed:", err));
       showOnly("view-dashboard");
       renderStatusLine(me.user);
@@ -1037,7 +1286,9 @@
       const cell = document.createElement("div");
       cell.className = `cal-cell ${cls}${isToday ? " today" : ""}`.trim();
       cell.textContent = day;
-      cell.title = dateStr;
+      cell.title = `View tasks for ${dateStr}`;
+      cell.style.cursor = "pointer";
+      cell.onclick = () => viewCalendarDate(dateStr);
       grid.appendChild(cell);
     }
     $("calTitle").textContent = data.monthLabel;
@@ -1068,11 +1319,9 @@
 
 
   // ---------- Goals ----------
-  function renderGoals(goals) {
-    const el = $("goalsList");
-    if (!goals.length) { el.innerHTML = `<p class="muted">No goals yet — add something ongoing you're working toward.</p>`; return; }
-    el.innerHTML = goals.map(g => `
-      <div class="roster-row" style="flex-direction:column;align-items:stretch">
+  function goalRowHtml(g) {
+    return `
+      <div class="roster-row" style="flex-direction:column;align-items:stretch" data-goal-id="${g.id}">
         <div class="row" style="justify-content:space-between">
           <span style="${g.status === 'done' ? 'text-decoration:line-through;color:var(--paper-dim)' : ''}">${g.title}</span>
           <span class="row" style="gap:6px;flex:0 0 auto">
@@ -1082,7 +1331,13 @@
         </div>
         ${g.motivation_line ? `<p class="muted" style="margin:6px 0 0;font-style:italic">💬 ${g.motivation_line}</p>` : ""}
         ${Array.isArray(g.ai_plan) && g.ai_plan.length ? `<ul style="margin:6px 0 0;padding-left:18px;font-size:13px;color:var(--paper-dim)">${g.ai_plan.map(s => `<li>${s}</li>`).join("")}</ul>` : ""}
-      </div>`).join("");
+      </div>`;
+  }
+
+  function renderGoals(goals) {
+    const el = $("goalsList");
+    if (!goals.length) { el.innerHTML = `<p class="muted">No goals yet — add something ongoing you're working toward.</p>`; return; }
+    el.innerHTML = goals.map(goalRowHtml).join("");
   }
 
   async function loadGoals() {
@@ -1147,13 +1402,48 @@
       body.fileData = await fileToBase64(pendingGoalVoice.blob);
       body.mimeType = pendingGoalVoice.mimeType;
     }
-    const result = await apiCall("/goal", { method: "POST", body: JSON.stringify(body) });
-    if (result.error) return;
+
+    // Gemini's plan takes a few seconds — without this, clicking Add looked like it did
+    // nothing at all. Disable the button and swap the tip line for a visible "thinking" state.
+    const addBtn = $("goalAddBtn");
+    const tipEl = $("goalTip");
+    const errEl = $("goalError");
+    const originalTip = tipEl.textContent;
+    addBtn.disabled = true;
+    addBtn.textContent = "Thinking…";
+    tipEl.textContent = "💭 Working out a plan for this goal, one moment…";
+    errEl.style.display = "none";
+
+    let result;
+    try {
+      result = await apiCall("/goal", { method: "POST", body: JSON.stringify(body) });
+    } catch (err) {
+      result = { error: "Couldn't reach the server — try again." };
+    }
+
+    addBtn.disabled = false;
+    addBtn.textContent = "Add";
+    tipEl.textContent = originalTip;
+
+    if (result.error) {
+      errEl.textContent = result.error;
+      errEl.style.display = "block";
+      return;
+    }
+
     $("addGoalInput").value = "";
     pendingGoalFile = null;
     pendingGoalVoice = null;
     $("goalAttachPreview").style.display = "none";
     $("goalFileInput").value = "";
+
+    // Show the freshly-added goal (with its Gemini plan, if one came back) right away
+    // instead of waiting on a second round-trip via loadGoals().
+    if (result.goal) {
+      const el = $("goalsList");
+      if (el.querySelector(".muted")) el.innerHTML = ""; // clear "no goals yet" placeholder
+      el.insertAdjacentHTML("afterbegin", goalRowHtml(result.goal));
+    }
     loadGoals().catch(() => {});
   };
 

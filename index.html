@@ -123,6 +123,7 @@
   <div id="view-signedout" class="card" style="display:none">
     <h2>Sign in</h2>
     <p class="lead">Sign in with the same Google account you'll use every day. If you already use the Telegram bot, this will let you link that same account to the website — nothing gets duplicated.</p>
+    <div id="signin-error" style="display:none; color:#e07a5f; font-size:13px; margin-bottom:10px; padding:8px; border:1px solid #e07a5f; border-radius:6px;"></div>
     <button class="btn-primary" onclick="signIn()">Continue with Google</button>
   </div>
 
@@ -601,6 +602,20 @@
 
   async function boot() {
     showOnly("loading");
+
+    // If Google/Supabase sent us back with an error instead of a session, show it
+    // instead of silently bouncing to the sign-in screen.
+    const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    const authError = hashParams.get("error_description") || hashParams.get("error");
+    if (authError) {
+      showOnly("view-signedout");
+      const errEl = $("signin-error");
+      errEl.textContent = decodeURIComponent(authError.replace(/\+/g, " "));
+      errEl.style.display = "";
+      history.replaceState(null, "", window.location.pathname);
+      return;
+    }
+
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { showOnly("view-signedout"); return; }
 

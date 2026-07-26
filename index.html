@@ -233,7 +233,7 @@
   }
 
   window.signIn = async function () {
-    await supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo: window.location.href } });
+    await supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo: window.location.origin + window.location.pathname } });
   };
   window.signOut = async function () {
     await supabase.auth.signOut();
@@ -604,9 +604,13 @@
     showOnly("loading");
 
     // If Google/Supabase sent us back with an error instead of a session, show it
-    // instead of silently bouncing to the sign-in screen.
+    // instead of silently bouncing to the sign-in screen. Supabase sends this as
+    // either a query param (?error=...) or a hash param (#error=...) depending on
+    // where in the flow it failed, so check both.
     const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
-    const authError = hashParams.get("error_description") || hashParams.get("error");
+    const searchParams = new URLSearchParams(window.location.search);
+    const authError = searchParams.get("error_description") || searchParams.get("error")
+      || hashParams.get("error_description") || hashParams.get("error");
     if (authError) {
       showOnly("view-signedout");
       const errEl = $("signin-error");

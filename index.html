@@ -195,6 +195,34 @@
   .cmd-you, .cmd-reply{ font-size:13px; line-height:1.4; margin:6px 0; padding:8px 10px; border-radius:8px; white-space:pre-wrap; }
   .cmd-you{ background:var(--ink-3); color:var(--paper); }
   .cmd-reply{ background:rgba(159,184,138,0.12); color:var(--paper); }
+
+  /* ---------- Toasts ---------- */
+  #toastStack{ position:fixed; top:16px; left:50%; transform:translateX(-50%); z-index:200; display:flex; flex-direction:column; gap:8px; align-items:center; width:100%; padding:0 16px; pointer-events:none; }
+  .toast{ background:var(--ink-2); border:1px solid var(--moss-dim); color:var(--paper); font-size:13px; padding:10px 16px; border-radius:10px; box-shadow:0 4px 14px rgba(0,0,0,0.25); max-width:420px; animation: toastIn 0.25s ease both; }
+  .toast.toast-error{ border-color:var(--red); }
+  @keyframes toastIn{ from{ opacity:0; transform:translateY(-8px); } to{ opacity:1; transform:translateY(0); } }
+
+  /* ---------- Day-tab strip (Today + surrounding days) ---------- */
+  .day-strip{ display:flex; align-items:center; gap:6px; margin-bottom:14px; }
+  .day-strip-nav{ background:none; border:1px solid var(--line); color:var(--paper-dim); width:28px; height:28px; border-radius:50%; flex:0 0 auto; cursor:pointer; line-height:1; }
+  .day-strip-nav:hover{ border-color:var(--moss-dim); color:var(--paper); }
+  .day-tabs{ display:flex; gap:6px; overflow-x:auto; flex:1; scrollbar-width:none; }
+  .day-tabs::-webkit-scrollbar{ display:none; }
+  .day-tab{ flex:0 0 auto; text-align:center; padding:7px 10px; border-radius:9px; font-size:12px; cursor:pointer; color:var(--paper-dim); border:1px solid var(--line); min-width:44px; }
+  .day-tab .dow{ display:block; font-size:10px; opacity:0.8; }
+  .day-tab.active{ color:var(--ink); background:var(--moss); border-color:var(--moss); font-weight:600; }
+  .day-tab.is-today:not(.active){ border-color:var(--moss-dim); color:var(--moss); }
+
+  /* ---------- Quick-toggle switch (tap to mark a task done, no evidence flow) ---------- */
+  .task-head{ display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+  .task-toggle{ position:relative; flex:0 0 auto; width:40px; height:22px; border-radius:20px; background:var(--ink-3); border:1px solid var(--line); cursor:pointer; transition:background 0.2s ease; }
+  .task-toggle .knob{ position:absolute; top:2px; left:2px; width:16px; height:16px; border-radius:50%; background:var(--paper-dim); transition:transform 0.2s ease, background 0.2s ease; display:flex; align-items:center; justify-content:center; font-size:10px; }
+  .task-toggle.on{ background:var(--moss); border-color:var(--moss); }
+  .task-toggle.on .knob{ transform:translateX(18px); background:#101410; }
+
+  /* ---------- Friend request pop-up ---------- */
+  #modal-friend-request .modal-card{ text-align:center; }
+  #modal-friend-request .feature-icon{ font-size:30px; width:auto; }
 </style>
 </head>
 <body>
@@ -294,7 +322,21 @@
           <input type="text" id="addGoalInput" placeholder="e.g. Get ACCA certified" style="margin-bottom:0" onkeydown="if(event.key==='Enter')addGoal()" />
           <button class="btn-ghost btn-small" style="flex:0 0 auto;width:auto" onclick="addGoal()">Add</button>
         </div>
+        <div class="row" style="margin-bottom:8px">
+          <button class="btn-ghost btn-small" style="flex:0 0 auto;width:auto" onclick="document.getElementById('goalAttachInput').click()">📎 Attach photo/doc</button>
+          <span class="muted" id="goalAttachName" style="align-self:center"></span>
+        </div>
+        <input type="file" accept="image/*,.pdf,.doc,.docx,.txt" id="goalAttachInput" style="display:none" onchange="onGoalAttachChosen()" />
         <div id="goalsList"></div>
+      </div>
+
+      <!-- ===== Day strip: jump between today and nearby days (6mo back / a week ahead) ===== -->
+      <div class="card" style="padding:14px 16px">
+        <div class="day-strip">
+          <button class="day-strip-nav" onclick="pageDayStrip(-7)" title="Back a week">‹</button>
+          <div class="day-tabs" id="dayTabs"></div>
+          <button class="day-strip-nav" onclick="pageDayStrip(7)" title="Forward a week">›</button>
+        </div>
       </div>
 
       <div class="card" id="taskList"></div>
@@ -371,6 +413,8 @@
     <div class="card" id="rosterList"></div>
   </div>
 
+  <div id="toastStack"></div>
+
   <!-- ===== WELCOME / HELP MODAL ===== -->
   <div id="modal-welcome" class="modal-overlay hidden">
     <div class="modal-card">
@@ -379,6 +423,19 @@
       <div id="welcomeFeatures"></div>
       <p class="muted" id="welcomeStatus" style="margin:14px 0 4px"></p>
       <button class="btn-primary" onclick="closeWelcome()">Got it</button>
+    </div>
+  </div>
+
+  <!-- ===== FRIEND REQUEST POP-UP ===== -->
+  <div id="modal-friend-request" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div class="feature-icon">👋</div>
+      <h2 style="margin:10px 0 4px">Friend request</h2>
+      <p class="lead" id="friendRequestName" style="margin-bottom:18px"></p>
+      <div class="row">
+        <button class="btn-ghost" onclick="respondFriendRequestPopup('decline')">Decline</button>
+        <button class="btn-primary" onclick="respondFriendRequestPopup('accept')">Accept</button>
+      </div>
     </div>
   </div>
 </div>
@@ -421,6 +478,53 @@
     const res = await fetch(`${WEB_API_URL}${path}`, { ...options, headers });
     return res.json();
   }
+
+  // ---------- Toasts (small confirmation popups, e.g. "goal added") ----------
+  function showToast(message, isError = false) {
+    const stack = $("toastStack");
+    const el = document.createElement("div");
+    el.className = "toast" + (isError ? " toast-error" : "");
+    el.textContent = message;
+    stack.appendChild(el);
+    setTimeout(() => el.remove(), 3200);
+  }
+
+  // ---------- Day strip: browse tasks for nearby days (6 months back / a week ahead) ----------
+  let viewedDate = new Date().toISOString().slice(0, 10);
+  let dayStripAnchor = new Date(); // the middle-ish date the currently-shown tab row is built around
+
+  function ymd(d) { return d.toISOString().slice(0, 10); }
+
+  function renderDayStrip() {
+    const el = $("dayTabs");
+    const todayStr = new Date().toISOString().slice(0, 10);
+    el.innerHTML = "";
+    // 8 tabs: 2 days back from the anchor through 5 days ahead — gives a "this week
+    // plus a little context" view per day, paged in whole-week jumps by the ‹ › buttons.
+    for (let offset = -2; offset <= 5; offset++) {
+      const d = new Date(dayStripAnchor);
+      d.setDate(d.getDate() + offset);
+      const dateStr = ymd(d);
+      const tab = document.createElement("div");
+      tab.className = "day-tab" + (dateStr === viewedDate ? " active" : "") + (dateStr === todayStr ? " is-today" : "");
+      tab.innerHTML = `<span class="dow">${d.toLocaleDateString(undefined,{weekday:"short"})}</span>${d.getDate()}`;
+      tab.onclick = () => selectDay(dateStr);
+      el.appendChild(tab);
+    }
+  }
+
+  window.pageDayStrip = function (days) {
+    dayStripAnchor.setDate(dayStripAnchor.getDate() + days);
+    renderDayStrip();
+  };
+
+  async function selectDay(dateStr) {
+    viewedDate = dateStr;
+    renderDayStrip();
+    const result = await apiCall(`/today?date=${dateStr}`);
+    if (!result.error) renderTasks(result.tasks || []);
+  }
+
 
   window.signIn = async function () {
     await supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo: window.location.href } });
@@ -490,8 +594,14 @@
       const row = document.createElement("div");
       row.className = "task";
       row.style.animationDelay = `${listEl.children.length * 45}ms`;
+      const isDone = t.status === "completed";
       row.innerHTML = `
-        <div class="task-title">${t.title}<span class="task-status status-${t.status}">${t.status.replace("_"," ")}</span></div>
+        <div class="task-head">
+          <div class="task-toggle${isDone ? " on" : ""}" id="toggle-${t.id}" onclick="quickToggleTask(${t.id})" title="Tap to mark done/not done">
+            <div class="knob">${isDone ? "✓" : "✗"}</div>
+          </div>
+          <div class="task-title" style="margin-bottom:0;flex:1">${t.title}<span class="task-status status-${t.status}">${t.status.replace("_"," ")}</span></div>
+        </div>
         <div class="evidence-box hidden" id="ev-${t.id}">
           <div class="evidence-tabs">
             <div class="evidence-tab active" id="etab-text-${t.id}" onclick="switchEvidenceTab(${t.id},'text')">Text</div>
@@ -530,6 +640,21 @@
 
   window.toggleEvidence = function (taskId) {
     $(`ev-${taskId}`).classList.toggle("hidden");
+  };
+
+  window.quickToggleTask = async function (taskId) {
+    const task = latestTasks.find(t => t.id === taskId);
+    if (!task) return;
+    const nowDone = task.status !== "completed";
+    // Optimistic UI: flip the switch immediately, roll back if the save fails.
+    task.status = nowDone ? "completed" : "pending";
+    renderTasks(latestTasks);
+    const result = await apiCall("/task", { method: "PATCH", body: JSON.stringify({ taskId, done: nowDone }) });
+    if (result.error) {
+      task.status = nowDone ? "pending" : "completed";
+      renderTasks(latestTasks);
+      showToast("Couldn't update that task — try again.", true);
+    }
   };
 
   window.switchEvidenceTab = function (taskId, which) {
@@ -908,6 +1033,9 @@
       maybeAutoShowWelcome(me.user.account_role, me.user);
     } else {
       $("greeting").textContent = `Hi, ${me.user.name || "there"}`;
+      viewedDate = new Date().toISOString().slice(0, 10);
+      dayStripAnchor = new Date();
+      renderDayStrip();
       const today = await apiCall("/today");
       latestTasks = today.tasks || [];
       renderTasks(latestTasks);
@@ -1005,7 +1133,7 @@
     if (!goals.length) { el.innerHTML = `<p class="muted">No goals yet — add something ongoing you're working toward.</p>`; return; }
     el.innerHTML = goals.map(g => `
       <div class="roster-row">
-        <span style="${g.status === 'done' ? 'text-decoration:line-through;color:var(--paper-dim)' : ''}">${g.title}</span>
+        <span style="${g.status === 'done' ? 'text-decoration:line-through;color:var(--paper-dim)' : ''}">${g.title}${g.attachment_type ? ' <span title="Has an attachment">📎</span>' : ''}</span>
         <span class="row" style="gap:6px">
           <button class="btn-ghost btn-small" style="width:auto;padding:6px 12px" onclick="toggleGoal(${g.id}, ${g.status !== 'done'})">${g.status === 'done' ? 'Reopen' : 'Done'}</button>
           <button class="btn-ghost btn-small" style="width:auto;padding:6px 12px" onclick="deleteGoal(${g.id})">Remove</button>
@@ -1018,12 +1146,42 @@
     if (!result.error) renderGoals(result.goals || []);
   }
 
+  // Pending attachment picked via the 📎 button, held until the goal is actually added.
+  let pendingGoalAttachment = null; // { fileData, mimeType, name } or null
+
+  window.onGoalAttachChosen = function () {
+    const input = $("goalAttachInput");
+    const file = input.files[0];
+    if (!file) return;
+    if (file.type.startsWith("video/")) {
+      showToast("Videos aren't supported for goals — photos and documents work fine.", true);
+      input.value = "";
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = reader.result.split(",")[1];
+      pendingGoalAttachment = { fileData: base64, mimeType: file.type, name: file.name };
+      $("goalAttachName").textContent = file.name;
+    };
+    reader.readAsDataURL(file);
+  };
+
   window.addGoal = async function () {
     const title = $("addGoalInput").value.trim();
     if (!title) return;
-    const result = await apiCall("/goal", { method: "POST", body: JSON.stringify({ title }) });
-    if (result.error) return;
+    const body = { title };
+    if (pendingGoalAttachment) {
+      body.fileData = pendingGoalAttachment.fileData;
+      body.mimeType = pendingGoalAttachment.mimeType;
+    }
+    const result = await apiCall("/goal", { method: "POST", body: JSON.stringify(body) });
+    if (result.error) { showToast(result.error, true); return; }
+    showToast(result.reply || `Added as an ongoing goal: "${title}"`);
     $("addGoalInput").value = "";
+    $("goalAttachInput").value = "";
+    $("goalAttachName").textContent = "";
+    pendingGoalAttachment = null;
     loadGoals().catch(() => {});
   };
 
@@ -1064,6 +1222,40 @@
       </div>`).join("");
   }
 
+  // Pop-up for incoming friend requests, so they're impossible to miss instead of
+  // sitting quietly at the bottom of the Friends card. seenFriendRequestIds is
+  // session-only (resets on reload) — the list below the Friends card is still there
+  // as a fallback for anything not popped up yet.
+  const seenFriendRequestIds = new Set();
+  let friendRequestPopupQueue = [];
+
+  function maybeShowFriendRequestPopup(requests) {
+    const unseen = requests.filter(r => !seenFriendRequestIds.has(r.id));
+    unseen.forEach(r => {
+      if (!friendRequestPopupQueue.some(q => q.id === r.id)) friendRequestPopupQueue.push(r);
+    });
+    if (friendRequestPopupQueue.length && $("modal-friend-request").classList.contains("hidden")) {
+      showNextFriendRequestPopup();
+    }
+  }
+
+  function showNextFriendRequestPopup() {
+    if (!friendRequestPopupQueue.length) { $("modal-friend-request").classList.add("hidden"); return; }
+    const next = friendRequestPopupQueue[0];
+    $("friendRequestName").textContent = `${next.from_name} wants to add you as a friend.`;
+    $("modal-friend-request").classList.remove("hidden");
+  }
+
+  window.respondFriendRequestPopup = async function (action) {
+    const next = friendRequestPopupQueue.shift();
+    if (next) {
+      seenFriendRequestIds.add(next.id);
+      await apiCall(`/friend-${action}`, { method: "POST", body: JSON.stringify({ requestId: next.id }) });
+    }
+    showNextFriendRequestPopup();
+    loadFriends().catch(() => {});
+  };
+
   async function loadFriends() {
     const codeResult = await apiCall("/friend-code");
     if (!codeResult.error) $("myFriendCode").value = codeResult.friend_code;
@@ -1072,7 +1264,10 @@
       apiCall("/friend-requests"),
       apiCall("/friends"),
     ]);
-    if (!reqResult.error) renderFriendRequests(reqResult.requests || []);
+    if (!reqResult.error) {
+      renderFriendRequests(reqResult.requests || []);
+      maybeShowFriendRequestPopup(reqResult.requests || []);
+    }
     if (!friendsResult.error) renderFriendsList(friendsResult.friends || []);
   }
 
@@ -1089,11 +1284,13 @@
     const body = raw.includes("@") ? { email: raw } : { code: raw };
     const result = await apiCall("/friend-request", { method: "POST", body: JSON.stringify(body) });
     if (result.error) { $("addFriendError").textContent = result.error; return; }
+    showToast(`Friend request sent.`);
     $("addFriendInput").value = "";
     loadFriends().catch(() => {});
   };
 
   window.respondFriendRequest = async function (requestId, action) {
+    seenFriendRequestIds.add(requestId);
     await apiCall(`/friend-${action}`, { method: "POST", body: JSON.stringify({ requestId }) });
     loadFriends().catch(() => {});
   };

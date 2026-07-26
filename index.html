@@ -51,9 +51,15 @@
   .theme-toggle:hover{ border-color:var(--moss-dim); color:var(--paper); }
 
   /* ---------- Desktop layout: single column becomes a two-column dashboard ---------- */
+  #loading, #view-signedout, #view-needscode, #view-dashboard, #view-roster{ display:none; }
+  #loading:not(.view-hidden){ display:flex; }
+  #view-signedout:not(.view-hidden), #view-needscode:not(.view-hidden), #view-roster:not(.view-hidden){ display:block; }
+  #view-dashboard:not(.view-hidden){ display:block; }
+
   @media (min-width: 900px){
     .wrap{ max-width:1040px; }
     #view-dashboard{ display:grid !important; grid-template-columns: 1.3fr 0.9fr; gap:20px; align-items:start; }
+    #view-dashboard.view-hidden{ display:none !important; } /* wins: ID+class beats ID alone */
     #view-dashboard .top-actions, #view-dashboard #statusLine{ grid-column: 1 / -1; }
     .dash-main{ display:flex; flex-direction:column; }
     .dash-side{ display:flex; flex-direction:column; }
@@ -189,14 +195,14 @@
   </div>
 
   <!-- ===== SIGNED OUT ===== -->
-  <div id="view-signedout" class="card" style="display:none">
+  <div id="view-signedout" class="card">
     <h2>Sign in</h2>
     <p class="lead">Sign in with the same Google account you'll use every day. If you already use the Telegram bot, this will let you link that same account to the website — nothing gets duplicated.</p>
     <button class="btn-primary" onclick="signIn()">Continue with Google</button>
   </div>
 
   <!-- ===== NEEDS CODE (new signup OR linking existing telegram account) ===== -->
-  <div id="view-needscode" class="card" style="display:none">
+  <div id="view-needscode" class="card">
     <div class="tabs">
       <div class="tab active" id="tab-join" onclick="switchCodeTab('join')">I'm new here</div>
       <div class="tab" id="tab-link" onclick="switchCodeTab('link')">I already use Telegram</div>
@@ -220,7 +226,7 @@
   </div>
 
   <!-- ===== DASHBOARD (student / employee / individual) ===== -->
-  <div id="view-dashboard" style="display:none">
+  <div id="view-dashboard">
     <div class="top-actions">
       <div class="top-actions-left">
         <h2 id="greeting">Today</h2>
@@ -272,7 +278,7 @@
   </div>
 
   <!-- ===== ROSTER (teacher / principal / manager / admin) ===== -->
-  <div id="view-roster" style="display:none">
+  <div id="view-roster">
     <div class="top-actions">
       <div class="top-actions-left">
         <h2>This week's roster</h2>
@@ -322,8 +328,8 @@
     const cached = localStorage.getItem("stride_theme");
     if (cached) document.documentElement.setAttribute("data-theme", cached);
   }
-  const show = (id) => { $(id).style.display = ""; };
-  const hide = (id) => { $(id).style.display = "none"; };
+  const show = (id) => { $(id).classList.remove("view-hidden"); };
+  const hide = (id) => { $(id).classList.add("view-hidden"); };
   const ALL_VIEWS = ["loading","view-signedout","view-needscode","view-dashboard","view-roster"];
   function showOnly(id){ ALL_VIEWS.forEach(v => v===id ? show(v) : hide(v)); }
 
@@ -869,7 +875,7 @@
 <script>
   setTimeout(function () {
     var loading = document.getElementById("loading");
-    if (loading && loading.style.display !== "none") {
+    if (loading && !loading.classList.contains("view-hidden")) {
       var el = document.getElementById("loadingText");
       if (el) {
         el.innerHTML = "This is taking longer than expected.<br><br>" +

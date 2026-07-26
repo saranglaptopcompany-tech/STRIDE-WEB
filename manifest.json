@@ -1,0 +1,10 @@
+{
+  "name": "Stride",
+  "short_name": "Stride",
+  "description": "Daily accountability, tasks, and evidence — for individuals, students, and teams.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#12140F",
+  "theme_color": "#12140F",
+  "icons": []
+}

@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Stride AI</title>
+<meta name="theme-color" content="#12140F" />
+<link rel="manifest" href="manifest.json" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#12140F; --ink-2:#1B1E17; --ink-3:#242820;
+    --paper:#EDEAE0; --paper-dim:#B9B6A9;
+    --moss:#9FB88A; --moss-dim:#75886A;
+    --amber:#E0A458;
+    --line: rgba(237,234,224,0.12);
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--ink); color:var(--paper);
+    font-family:'Inter',system-ui,sans-serif; -webkit-font-smoothing:antialiased;
+    min-height:100vh; display:flex; flex-direction:column;
+  }
+  h1,h2,h3{ font-family:'Fraunces',serif; font-weight:600; margin:0; }
+  .wrap{ max-width:520px; margin:0 auto; width:100%; padding:24px; flex:1; display:flex; flex-direction:column; }
+  .brand{ display:flex; align-items:center; gap:10px; padding:20px 24px; }
+  .brand .mark{ width:10px; height:10px; border-radius:50%; background:var(--moss); box-shadow:0 0 0 4px rgba(159,184,138,0.15); }
+  .brand span{ font-family:'Fraunces',serif; font-size:19px; letter-spacing:0.02em; }
+  .card{ background:var(--ink-2); border:1px solid var(--line); border-radius:14px; padding:22px; margin-bottom:14px; }
+  p.lead{ color:var(--paper-dim); font-size:15px; line-height:1.5; margin:6px 0 20px; }
+  input[type=text]{
+    width:100%; background:var(--ink); border:1px solid var(--line); color:var(--paper);
+    padding:13px 14px; border-radius:9px; font-size:15px; font-family:inherit; margin-bottom:10px;
+  }
+  input:focus, button:focus-visible{ outline:2px solid var(--moss); outline-offset:2px; }
+  textarea{
+    width:100%; background:var(--ink); border:1px solid var(--line); color:var(--paper);
+    padding:12px 14px; border-radius:9px; font-size:14px; font-family:inherit; min-height:72px; resize:vertical;
+  }
+  button{
+    font-family:inherit; font-size:15px; font-weight:600; border-radius:9px; border:none;
+    padding:13px 18px; cursor:pointer; width:100%;
+  }
+  .btn-primary{ background:var(--moss); color:#101410; }
+  .btn-primary:hover{ background:#B0CC9C; }
+  .btn-ghost{ background:transparent; color:var(--paper); border:1px solid var(--line); }
+  .btn-ghost:hover{ border-color:var(--moss-dim); }
+  .btn-small{ width:auto; padding:8px 14px; font-size:13px; }
+  .row{ display:flex; gap:10px; }
+  .muted{ color:var(--paper-dim); font-size:13px; }
+  .error{ color:var(--amber); font-size:13px; margin:6px 0 0; }
+  .tabs{ display:flex; gap:8px; margin-bottom:16px; }
+  .tab{ flex:1; text-align:center; padding:9px; border-radius:8px; font-size:13px; cursor:pointer; color:var(--paper-dim); border:1px solid var(--line); }
+  .tab.active{ color:var(--ink); background:var(--moss); border-color:var(--moss); font-weight:600; }
+  /* the "stride" progress trail — dots joined by a dashed path, one per task */
+  .trail{ display:flex; align-items:center; gap:4px; margin:4px 0 18px; }
+  .trail .step{ flex:1; height:3px; border-radius:2px; background:var(--line); }
+  .trail .step.done{ background:var(--moss); }
+  .task{ border-bottom:1px solid var(--line); padding:16px 0; }
+  .task:last-child{ border-bottom:none; }
+  .task-title{ font-size:15px; font-weight:500; margin-bottom:8px; }
+  .task-status{ display:inline-block; font-size:11px; padding:2px 8px; border-radius:20px; margin-left:8px; vertical-align:middle; }
+  .status-pending{ background:var(--ink-3); color:var(--paper-dim); }
+  .status-completed{ background:rgba(159,184,138,0.2); color:var(--moss); }
+  .status-partial, .status-not_completed{ background:rgba(224,164,88,0.18); color:var(--amber); }
+  .evidence-box{ margin-top:8px; }
+  .evidence-box.hidden{ display:none; }
+  .saved-tag{ font-size:12px; color:var(--moss); margin-top:6px; }
+  .roster-row{ display:flex; justify-content:space-between; align-items:center; padding:12px 0; border-bottom:1px solid var(--line); font-size:14px; }
+  .roster-row:last-child{ border-bottom:none; }
+  .flag{ color:var(--amber); font-size:12px; }
+  .top-actions{ display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
+  .icon-btn{ background:none; border:none; color:var(--paper-dim); font-size:13px; width:auto; padding:4px 0; cursor:pointer; }
+  #loading{ display:flex; align-items:center; justify-content:center; flex:1; color:var(--paper-dim); }
+</style>
+</head>
+<body>
+
+<div class="brand"><div class="mark"></div><span>Stride</span></div>
+
+<div class="wrap">
+  <div id="loading"><span class="muted">Loading…</span></div>
+
+  <!-- ===== SIGNED OUT ===== -->
+  <div id="view-signedout" class="card" style="display:none">
+    <h2>Sign in</h2>
+    <p class="lead">Sign in with the same Google account you'll use every day. If you already use the Telegram bot, this will let you link that same account to the website — nothing gets duplicated.</p>
+    <button class="btn-primary" onclick="signIn()">Continue with Google</button>
+  </div>
+
+  <!-- ===== NEEDS CODE (new signup OR linking existing telegram account) ===== -->
+  <div id="view-needscode" class="card" style="display:none">
+    <div class="tabs">
+      <div class="tab active" id="tab-join" onclick="switchCodeTab('join')">I'm new here</div>
+      <div class="tab" id="tab-link" onclick="switchCodeTab('link')">I already use Telegram</div>
+    </div>
+
+    <div id="pane-join">
+      <h2>Enter your access code</h2>
+      <p class="lead">Whoever gave you this app also gave you a code like <b>ACC-8X2K1M</b>. Type it below.</p>
+      <input type="text" id="joinCodeInput" placeholder="ACC-8X2K1M" autocapitalize="characters" />
+      <button class="btn-primary" onclick="submitJoin()">Join</button>
+      <p class="error" id="joinError"></p>
+    </div>
+
+    <div id="pane-link" style="display:none">
+      <h2>Connect your Telegram account</h2>
+      <p class="lead">Open Telegram, message the bot <b>/linkweb</b>, and it'll reply with a short code. Type that here.</p>
+      <input type="text" id="linkCodeInput" placeholder="8X2K1M" autocapitalize="characters" />
+      <button class="btn-primary" onclick="submitLink()">Link account</button>
+      <p class="error" id="linkError"></p>
+    </div>
+  </div>
+
+  <!-- ===== DASHBOARD (student / employee / individual) ===== -->
+  <div id="view-dashboard" style="display:none">
+    <div class="top-actions">
+      <h2 id="greeting">Today</h2>
+      <button class="icon-btn" onclick="signOut()">Sign out</button>
+    </div>
+    <div class="trail" id="trail"></div>
+    <div class="card" id="taskList"></div>
+  </div>
+
+  <!-- ===== ROSTER (teacher / principal / manager / admin) ===== -->
+  <div id="view-roster" style="display:none">
+    <div class="top-actions">
+      <h2>This week's roster</h2>
+      <button class="icon-btn" onclick="signOut()">Sign out</button>
+    </div>
+    <div class="card" id="rosterList"></div>
+  </div>
+</div>
+
+<script type="module">
+  // ======================================================================
+  // CONFIG — fill these three in before deploying. Find them in Supabase:
+  //   Project Settings → API → Project URL            -> SUPABASE_URL
+  //   Project Settings → API → anon / public key       -> SUPABASE_ANON_KEY
+  //   Edge Functions → web-api → its Function URL       -> WEB_API_URL
+  // ======================================================================
+  const SUPABASE_URL = "https://YOUR-PROJECT.supabase.cohttps://ynsmiydpeithbadsdlkc.supabase.co/rest/v1/";
+  const SUPABASE_ANON_KEY = "sb_publishable_r7HqmYn6gJMtOdW5B3qRPQ_qlIrhDi9";
+  const WEB_API_URL = "https://ynsmiydpeithbadsdlkc.supabase.co/functions/v1/dynamic-api";
+
+  import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  const $ = (id) => document.getElementById(id);
+  const show = (id) => { $(id).style.display = ""; };
+  const hide = (id) => { $(id).style.display = "none"; };
+  const ALL_VIEWS = ["loading","view-signedout","view-needscode","view-dashboard","view-roster"];
+  function showOnly(id){ ALL_VIEWS.forEach(v => v===id ? show(v) : hide(v)); }
+
+  async function apiCall(path, options = {}) {
+    const { data: { session } } = await supabase.auth.getSession();
+    const headers = { "Content-Type": "application/json", ...(options.headers||{}) };
+    if (session) headers.Authorization = `Bearer ${session.access_token}`;
+    const res = await fetch(`${WEB_API_URL}${path}`, { ...options, headers });
+    return res.json();
+  }
+
+  window.signIn = async function () {
+    await supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo: window.location.href } });
+  };
+  window.signOut = async function () {
+    await supabase.auth.signOut();
+    showOnly("view-signedout");
+  };
+
+  window.switchCodeTab = function (which) {
+    $("tab-join").classList.toggle("active", which === "join");
+    $("tab-link").classList.toggle("active", which === "link");
+    $("pane-join").style.display = which === "join" ? "" : "none";
+    $("pane-link").style.display = which === "link" ? "" : "none";
+  };
+
+  window.submitJoin = async function () {
+    const code = $("joinCodeInput").value.trim();
+    if (!code) return;
+    const result = await apiCall("/join", { method: "POST", body: JSON.stringify({ code }) });
+    if (result.error) { $("joinError").textContent = result.error; return; }
+    await boot();
+  };
+
+  window.submitLink = async function () {
+    const linkCode = $("linkCodeInput").value.trim();
+    if (!linkCode) return;
+    const result = await apiCall("/link", { method: "POST", body: JSON.stringify({ linkCode }) });
+    if (result.error) { $("linkError").textContent = result.error; return; }
+    await boot();
+  };
+
+  function renderTasks(tasks) {
+    const listEl = $("taskList");
+    const trailEl = $("trail");
+    trailEl.innerHTML = "";
+    listEl.innerHTML = "";
+
+    if (tasks.length === 0) {
+      listEl.innerHTML = '<p class="muted">No tasks yet for today.</p>';
+      return;
+    }
+
+    tasks.forEach(t => {
+      const step = document.createElement("div");
+      step.className = "step" + (t.status === "completed" ? " done" : "");
+      trailEl.appendChild(step);
+
+      const row = document.createElement("div");
+      row.className = "task";
+      row.innerHTML = `
+        <div class="task-title">${t.title}<span class="task-status status-${t.status}">${t.status.replace("_"," ")}</span></div>
+        <div class="evidence-box hidden" id="ev-${t.id}">
+          <textarea id="ev-text-${t.id}" placeholder="What did you do? Type it here..."></textarea>
+          <button class="btn-ghost btn-small" onclick="submitEvidence(${t.id})">Submit evidence</button>
+          <div class="saved-tag hidden" id="ev-saved-${t.id}">Saved — reviewed each morning.</div>
+        </div>
+        <button class="btn-ghost btn-small" onclick="toggleEvidence(${t.id})">Add evidence</button>
+      `;
+      listEl.appendChild(row);
+    });
+  }
+
+  window.toggleEvidence = function (taskId) {
+    $(`ev-${taskId}`).classList.toggle("hidden");
+  };
+
+  window.submitEvidence = async function (taskId) {
+    const textContent = $(`ev-text-${taskId}`).value.trim();
+    if (!textContent) return;
+    const result = await apiCall("/evidence", { method: "POST", body: JSON.stringify({ taskId, textContent }) });
+    if (result.saved) {
+      $(`ev-saved-${taskId}`).classList.remove("hidden");
+      $(`ev-text-${taskId}`).value = "";
+    }
+  };
+
+  function renderRoster(people) {
+    const el = $("rosterList");
+    if (people.length === 0) { el.innerHTML = '<p class="muted">No one\'s on your roster yet.</p>'; return; }
+    el.innerHTML = people.map(p => `
+      <div class="roster-row">
+        <span>${p.name || "Unnamed"}</span>
+        <span>${p.week_tasks_done}/${p.week_tasks_total} this week
+          ${p.week_flagged_count > 0 ? `<span class="flag"> ⚠ ${p.week_flagged_count}</span>` : ""}
+        </span>
+      </div>`).join("");
+  }
+
+  async function boot() {
+    showOnly("loading");
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) { showOnly("view-signedout"); return; }
+
+    const me = await apiCall("/me");
+    if (me.error) { showOnly("view-needscode"); return; }
+
+    const rosterRoles = ["teacher", "principal", "manager", "admin"];
+    if (rosterRoles.includes(me.user.account_role)) {
+      const roster = await apiCall("/roster");
+      renderRoster(roster.people || []);
+      showOnly("view-roster");
+    } else {
+      $("greeting").textContent = `Hi, ${me.user.name || "there"}`;
+      const today = await apiCall("/today");
+      renderTasks(today.tasks || []);
+      showOnly("view-dashboard");
+    }
+  }
+
+  supabase.auth.onAuthStateChange((_event) => { boot(); });
+  boot();
+
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("service-worker.js").catch(() => {});
+  }
+</script>
+</body>
+</html>

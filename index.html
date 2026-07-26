@@ -158,7 +158,7 @@
   .icon-btn{ background:none; border:none; color:var(--paper-dim); font-size:13px; width:auto; padding:4px 0; cursor:pointer; }
   .bell-btn{ background:none; border:none; color:var(--paper-dim); font-size:18px; width:auto; padding:4px; cursor:pointer; line-height:1; }
   .bell-btn.on{ color:var(--moss); }
-  #loading{ display:flex; flex-direction:column; flex:1; color:var(--paper-dim); }
+  #loading{ flex-direction:column; flex:1; color:var(--paper-dim); } /* display is handled solely by #loading:not(.view-hidden) above — don't set it here or it re-creates the specificity tie */
 
   /* ---------- Loading skeleton (shown instead of a bare "Loading…" string) ---------- */
   @keyframes shimmer{ 0%{ background-position:-400px 0; } 100%{ background-position:400px 0; } }
@@ -312,6 +312,29 @@
           <span><i class="cal-dot" style="background:var(--amber)"></i> Partial</span>
           <span><i class="cal-dot" style="background:var(--ink-3)"></i> No data</span>
         </div>
+      </div>
+
+      <!-- ===== Friends ===== -->
+      <div class="card" id="friendsCard">
+        <div class="top-actions" style="margin-bottom:10px">
+          <div class="top-actions-left"><h3 style="font-size:15px">Friends</h3></div>
+        </div>
+
+        <p class="muted" style="margin:0 0 6px">Your code — share it so others can add you</p>
+        <div class="row" style="margin-bottom:14px">
+          <input type="text" id="myFriendCode" readonly placeholder="…" style="margin-bottom:0;text-align:center;letter-spacing:0.12em;font-weight:600" />
+          <button class="btn-ghost btn-small" style="flex:0 0 auto;width:auto" onclick="copyFriendCode()">Copy</button>
+        </div>
+
+        <p class="muted" style="margin:0 0 6px">Add a friend by code or email</p>
+        <div class="row" style="margin-bottom:6px">
+          <input type="text" id="addFriendInput" placeholder="Code (ABC123) or email" style="margin-bottom:0" onkeydown="if(event.key==='Enter')addFriend()" />
+          <button class="btn-ghost btn-small" style="flex:0 0 auto;width:auto" onclick="addFriend()">Add</button>
+        </div>
+        <p class="error" id="addFriendError"></p>
+
+        <div id="friendRequests"></div>
+        <div id="friendsList"></div>
       </div>
     </div>
   </div>
@@ -829,6 +852,7 @@
       renderStatusLine(me.user);
       await refreshBellState();
       maybeAutoShowWelcome(me.user.account_role, me.user);
+      loadFriends().catch((err) => console.error("Friends load failed:", err));
     }
   }
 
@@ -908,6 +932,67 @@
     const first = new Date(days[0]);
     $("calTitle").textContent = `${first.toLocaleDateString(undefined,{month:"short",day:"numeric"})} – today`;
   }
+
+  // ---------- Friends ----------
+  // Wrapped in its own try/catch and called after the main dashboard is already
+  // showing — a failure here (e.g. migration not run yet) should never block the
+  // rest of the dashboard from rendering.
+  function renderFriendRequests(requests) {
+    const el = $("friendRequests");
+    if (!requests.length) { el.innerHTML = ""; return; }
+    el.innerHTML = `<p class="muted" style="margin:14px 0 6px">Requests</p>` + requests.map(r => `
+      <div class="roster-row">
+        <span>${r.from_name}</span>
+        <span class="row" style="gap:6px">
+          <button class="btn-ghost btn-small" style="width:auto;padding:6px 12px" onclick="respondFriendRequest(${r.id},'accept')">Accept</button>
+          <button class="btn-ghost btn-small" style="width:auto;padding:6px 12px" onclick="respondFriendRequest(${r.id},'decline')">Decline</button>
+        </span>
+      </div>`).join("");
+  }
+
+  function renderFriendsList(friends) {
+    const el = $("friendsList");
+    if (!friends.length) { el.innerHTML = `<p class="muted" style="margin:14px 0 0">No friends added yet.</p>`; return; }
+    el.innerHTML = `<p class="muted" style="margin:14px 0 6px">Friends</p>` + friends.map(f => `
+      <div class="roster-row">
+        <span>${f.name} ${f.current_streak > 0 ? `<span class="muted">🔥${f.current_streak}</span>` : ""}</span>
+        <span class="muted">${f.score} pts</span>
+      </div>`).join("");
+  }
+
+  async function loadFriends() {
+    const codeResult = await apiCall("/friend-code");
+    if (!codeResult.error) $("myFriendCode").value = codeResult.friend_code;
+
+    const [reqResult, friendsResult] = await Promise.all([
+      apiCall("/friend-requests"),
+      apiCall("/friends"),
+    ]);
+    if (!reqResult.error) renderFriendRequests(reqResult.requests || []);
+    if (!friendsResult.error) renderFriendsList(friendsResult.friends || []);
+  }
+
+  window.copyFriendCode = function () {
+    const val = $("myFriendCode").value;
+    if (!val) return;
+    navigator.clipboard.writeText(val).catch(() => {});
+  };
+
+  window.addFriend = async function () {
+    const raw = $("addFriendInput").value.trim();
+    $("addFriendError").textContent = "";
+    if (!raw) return;
+    const body = raw.includes("@") ? { email: raw } : { code: raw };
+    const result = await apiCall("/friend-request", { method: "POST", body: JSON.stringify(body) });
+    if (result.error) { $("addFriendError").textContent = result.error; return; }
+    $("addFriendInput").value = "";
+    loadFriends().catch(() => {});
+  };
+
+  window.respondFriendRequest = async function (requestId, action) {
+    await apiCall(`/friend-${action}`, { method: "POST", body: JSON.stringify({ requestId }) });
+    loadFriends().catch(() => {});
+  };
 
   supabase.auth.onAuthStateChange((_event) => { boot().catch(showBootError); });
   boot().catch(showBootError);

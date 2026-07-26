@@ -16,18 +16,82 @@
     --amber:#E0A458;
     --red:#D97757;
     --line: rgba(237,234,224,0.12);
+    --shadow: 0 1px 2px rgba(0,0,0,0.3);
   }
+  /* Light theme: same identity (paper/ink/moss/amber), roles inverted rather than a
+     different palette — so switching themes never feels like a different product. */
+  html[data-theme="light"]{
+    --ink:#EDEAE0; --ink-2:#FFFFFF; --ink-3:#E4E0D2;
+    --paper:#211F19; --paper-dim:#6B6759;
+    --moss:#5C7A48; --moss-dim:#3F5533;
+    --amber:#B5762A;
+    --red:#B14E30;
+    --line: rgba(33,31,25,0.10);
+    --shadow: 0 1px 3px rgba(33,31,25,0.08);
+  }
+  html{ color-scheme: dark; }
+  html[data-theme="light"]{ color-scheme: light; }
   *{box-sizing:border-box;}
   body{
     margin:0; background:var(--ink); color:var(--paper);
     font-family:'Inter',system-ui,sans-serif; -webkit-font-smoothing:antialiased;
     min-height:100vh; display:flex; flex-direction:column;
+    transition: background-color 0.35s ease, color 0.35s ease;
   }
   h1,h2,h3{ font-family:'Fraunces',serif; font-weight:600; margin:0; }
   .wrap{ max-width:520px; margin:0 auto; width:100%; padding:24px; flex:1; display:flex; flex-direction:column; }
-  .brand{ display:flex; align-items:center; gap:10px; padding:20px 24px; }
+  .brand{ display:flex; align-items:center; justify-content:space-between; padding:20px 24px; }
+  .brand-left{ display:flex; align-items:center; gap:10px; }
   .brand .mark{ width:10px; height:10px; border-radius:50%; background:var(--moss); box-shadow:0 0 0 4px rgba(159,184,138,0.15); }
   .brand span{ font-family:'Fraunces',serif; font-size:19px; letter-spacing:0.02em; }
+  .theme-toggle{
+    width:auto; background:var(--ink-2); border:1px solid var(--line); color:var(--paper-dim);
+    border-radius:20px; padding:6px 12px; font-size:12px; cursor:pointer; display:flex; align-items:center; gap:6px;
+  }
+  .theme-toggle:hover{ border-color:var(--moss-dim); color:var(--paper); }
+
+  /* ---------- Desktop layout: single column becomes a two-column dashboard ---------- */
+  @media (min-width: 900px){
+    .wrap{ max-width:1040px; }
+    #view-dashboard{ display:grid !important; grid-template-columns: 1.3fr 0.9fr; gap:20px; align-items:start; }
+    #view-dashboard .top-actions, #view-dashboard #statusLine{ grid-column: 1 / -1; }
+    .dash-main{ display:flex; flex-direction:column; }
+    .dash-side{ display:flex; flex-direction:column; }
+  }
+
+  /* ---------- Motion ---------- */
+  @keyframes riseIn{ from{ opacity:0; transform:translateY(8px); } to{ opacity:1; transform:translateY(0); } }
+  @keyframes popIn{ from{ opacity:0; transform:scale(0.6); } to{ opacity:1; transform:scale(1); } }
+  .task, .roster-row{ animation: riseIn 0.4s ease both; }
+  .cal-cell{ animation: popIn 0.3s ease both; }
+  @media (prefers-reduced-motion: reduce){
+    *{ animation-duration: 0.001s !important; transition-duration: 0.001s !important; }
+  }
+
+  /* ---------- Score badge ---------- */
+  .score-card{
+    background:var(--ink-2); border:1px solid var(--line); border-radius:14px; padding:20px 22px;
+    margin-bottom:14px; display:flex; align-items:center; justify-content:space-between;
+  }
+  .score-num{ font-family:'Fraunces',serif; font-size:34px; font-weight:700; color:var(--moss); line-height:1; }
+  .score-label{ font-size:12px; color:var(--paper-dim); margin-top:4px; letter-spacing:0.02em; }
+  .streak-chip{ font-size:13px; background:rgba(224,164,88,0.14); color:var(--amber); padding:6px 12px; border-radius:20px; white-space:nowrap; }
+
+  /* ---------- Streak calendar ---------- */
+  .cal-card{ background:var(--ink-2); border:1px solid var(--line); border-radius:14px; padding:20px 22px; margin-bottom:14px; }
+  .cal-title{ font-size:13px; color:var(--paper-dim); margin-bottom:12px; }
+  .cal-grid{ display:grid; grid-template-columns: repeat(7, 1fr); gap:6px; }
+  .cal-dow{ font-size:10px; color:var(--paper-dim); text-align:center; padding-bottom:2px; }
+  .cal-cell{
+    aspect-ratio:1; border-radius:7px; display:flex; align-items:center; justify-content:center;
+    font-size:11px; color:var(--paper-dim); background:var(--ink-3); border:1px solid transparent;
+  }
+  .cal-cell.done{ background:var(--moss); color:#101410; font-weight:600; }
+  .cal-cell.partial{ background:rgba(224,164,88,0.35); color:var(--ink); font-weight:600; }
+  .cal-cell.today{ border-color:var(--moss); }
+  .cal-legend{ display:flex; gap:14px; margin-top:12px; font-size:11px; color:var(--paper-dim); }
+  .cal-legend span{ display:inline-flex; align-items:center; gap:5px; }
+  .cal-dot{ width:9px; height:9px; border-radius:3px; display:inline-block; }
   .card{ background:var(--ink-2); border:1px solid var(--line); border-radius:14px; padding:22px; margin-bottom:14px; }
   p.lead{ color:var(--paper-dim); font-size:15px; line-height:1.5; margin:6px 0 20px; }
   input[type=text]{
@@ -114,7 +178,10 @@
 </head>
 <body>
 
-<div class="brand"><div class="mark"></div><span>Stride</span></div>
+<div class="brand">
+  <div class="brand-left"><div class="mark"></div><span>Stride</span></div>
+  <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()">🌙 <span id="themeLabel">Dark</span></button>
+</div>
 
 <div class="wrap">
   <div id="loading"><span class="muted">Loading…</span></div>
@@ -123,7 +190,6 @@
   <div id="view-signedout" class="card" style="display:none">
     <h2>Sign in</h2>
     <p class="lead">Sign in with the same Google account you'll use every day. If you already use the Telegram bot, this will let you link that same account to the website — nothing gets duplicated.</p>
-    <div id="signin-error" style="display:none; color:#e07a5f; font-size:13px; margin-bottom:10px; padding:8px; border:1px solid #e07a5f; border-radius:6px;"></div>
     <button class="btn-primary" onclick="signIn()">Continue with Google</button>
   </div>
 
@@ -162,15 +228,40 @@
       <button class="icon-btn" onclick="signOut()">Sign out</button>
     </div>
     <p class="muted" id="statusLine" style="margin:-8px 0 14px"></p>
-    <div class="trail" id="trail"></div>
-    <div class="card" id="taskList"></div>
 
-    <!-- ===== COMMAND BOX (same free-text commands as the Telegram bot) ===== -->
-    <div class="card">
-      <p class="muted" style="margin:0 0 10px">Type anything — same commands as Telegram: "add task: ...", "/status", "/help", "/paid"</p>
-      <div id="commandLog"></div>
-      <input type="text" id="commandInput" placeholder="Type a message…" onkeydown="if(event.key==='Enter')sendCommand()" />
-      <button class="btn-ghost btn-small" onclick="sendCommand()">Send</button>
+    <div class="dash-main">
+      <div class="trail" id="trail"></div>
+      <div class="card" id="taskList"></div>
+
+      <!-- ===== COMMAND BOX (same free-text commands as the Telegram bot) ===== -->
+      <div class="card">
+        <p class="muted" style="margin:0 0 10px">Type anything — same commands as Telegram: "add task: ...", "/status", "/help", "/paid"</p>
+        <div id="commandLog"></div>
+        <input type="text" id="commandInput" placeholder="Type a message…" onkeydown="if(event.key==='Enter')sendCommand()" />
+        <button class="btn-ghost btn-small" onclick="sendCommand()">Send</button>
+      </div>
+    </div>
+
+    <div class="dash-side">
+      <!-- ===== Stride Score ===== -->
+      <div class="score-card">
+        <div>
+          <div class="score-num" id="scoreNum">0</div>
+          <div class="score-label">STRIDE SCORE</div>
+        </div>
+        <div class="streak-chip" id="streakChip">🔥 0 day streak</div>
+      </div>
+
+      <!-- ===== Streak calendar ===== -->
+      <div class="cal-card">
+        <div class="cal-title" id="calTitle">Last 5 weeks</div>
+        <div class="cal-grid" id="calGrid"></div>
+        <div class="cal-legend">
+          <span><i class="cal-dot" style="background:var(--moss)"></i> Completed</span>
+          <span><i class="cal-dot" style="background:rgba(224,164,88,0.35)"></i> Partial</span>
+          <span><i class="cal-dot" style="background:var(--ink-3)"></i> No data</span>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -219,6 +310,12 @@
   const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
   const $ = (id) => document.getElementById(id);
+  // Apply any locally-remembered theme immediately, before auth/network resolve —
+  // corrected against the server value (theme_preference) once /me comes back in boot().
+  {
+    const cached = localStorage.getItem("stride_theme");
+    if (cached) document.documentElement.setAttribute("data-theme", cached);
+  }
   const show = (id) => { $(id).style.display = ""; };
   const hide = (id) => { $(id).style.display = "none"; };
   const ALL_VIEWS = ["loading","view-signedout","view-needscode","view-dashboard","view-roster"];
@@ -233,7 +330,7 @@
   }
 
   window.signIn = async function () {
-    await supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo: window.location.origin + window.location.pathname } });
+    await supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo: window.location.href } });
   };
   window.signOut = async function () {
     await supabase.auth.signOut();
@@ -283,6 +380,7 @@
 
       const row = document.createElement("div");
       row.className = "task";
+      row.style.animationDelay = `${listEl.children.length * 45}ms`;
       row.innerHTML = `
         <div class="task-title">${t.title}<span class="task-status status-${t.status}">${t.status.replace("_"," ")}</span></div>
         <div class="evidence-box hidden" id="ev-${t.id}">
@@ -591,9 +689,9 @@
   function renderRoster(people) {
     const el = $("rosterList");
     if (people.length === 0) { el.innerHTML = '<p class="muted">No one\'s on your roster yet.</p>'; return; }
-    el.innerHTML = people.map(p => `
-      <div class="roster-row">
-        <span>${p.name || "Unnamed"}</span>
+    el.innerHTML = people.map((p, i) => `
+      <div class="roster-row" style="animation-delay:${i * 45}ms">
+        <span>${p.name || "Unnamed"} ${p.current_streak > 0 ? `<span class="muted">🔥${p.current_streak}</span>` : ""}</span>
         <span>${p.week_tasks_done}/${p.week_tasks_total} this week
           ${p.week_flagged_count > 0 ? `<span class="flag"> ⚠ ${p.week_flagged_count}</span>` : ""}
         </span>
@@ -602,29 +700,13 @@
 
   async function boot() {
     showOnly("loading");
-
-    // If Google/Supabase sent us back with an error instead of a session, show it
-    // instead of silently bouncing to the sign-in screen. Supabase sends this as
-    // either a query param (?error=...) or a hash param (#error=...) depending on
-    // where in the flow it failed, so check both.
-    const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
-    const searchParams = new URLSearchParams(window.location.search);
-    const authError = searchParams.get("error_description") || searchParams.get("error")
-      || hashParams.get("error_description") || hashParams.get("error");
-    if (authError) {
-      showOnly("view-signedout");
-      const errEl = $("signin-error");
-      errEl.textContent = decodeURIComponent(authError.replace(/\+/g, " "));
-      errEl.style.display = "";
-      history.replaceState(null, "", window.location.pathname);
-      return;
-    }
-
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { showOnly("view-signedout"); return; }
 
     const me = await apiCall("/me");
     if (me.error) { showOnly("view-needscode"); return; }
+
+    applyTheme(me.user.theme_preference === "light" ? "light" : "dark", false);
 
     const rosterRoles = ["teacher", "principal", "manager", "admin"];
     if (rosterRoles.includes(me.user.account_role)) {
@@ -637,11 +719,77 @@
       $("greeting").textContent = `Hi, ${me.user.name || "there"}`;
       const today = await apiCall("/today");
       renderTasks(today.tasks || []);
+      renderScore(today.streak || { current: 0, longest: 0, score: 0 });
+      renderCalendar(today.calendar || []);
       showOnly("view-dashboard");
       renderStatusLine(me.user);
       await refreshBellState();
       maybeAutoShowWelcome(me.user.account_role, me.user);
     }
+  }
+
+  // ---------- Theme ----------
+  // Applied the instant we know the user's saved preference (before their first paint
+  // of the dashboard) so there's no flash of the wrong theme. `persist` only hits the
+  // network when the person actually clicks the toggle, not on every boot().
+  function applyTheme(theme, persist) {
+    document.documentElement.setAttribute("data-theme", theme);
+    $("themeLabel").textContent = theme === "light" ? "Light" : "Dark";
+    $("themeToggle").firstChild.textContent = theme === "light" ? "☀️ " : "🌙 ";
+    localStorage.setItem("stride_theme", theme);
+    if (persist) apiCall("/theme", { method: "PATCH", body: JSON.stringify({ theme }) }).catch(() => {});
+  }
+
+  window.toggleTheme = function () {
+    const current = document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
+    applyTheme(current === "light" ? "dark" : "light", true);
+  };
+
+  // ---------- Stride Score ----------
+  // Animated count-up rather than just printing the number — small motion moment that
+  // makes checking your score feel like a small reward, not just reading a stat.
+  function renderScore(streak) {
+    $("streakChip").textContent = `🔥 ${streak.current} day${streak.current === 1 ? "" : "s"} streak`;
+    const el = $("scoreNum");
+    const target = streak.score || 0;
+    const duration = 700;
+    const start = performance.now();
+    function tick(now) {
+      const p = Math.min(1, (now - start) / duration);
+      el.textContent = Math.round(target * (1 - Math.pow(1 - p, 3))); // ease-out cubic
+      if (p < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+
+  // ---------- Streak calendar ----------
+  // Last 35 days as a 5-week grid (Sun-Sat columns), newest week at the bottom, filled
+  // in the same moss/amber language as task status elsewhere — one visual vocabulary
+  // for "done" everywhere in the app, not a separate calendar color scheme.
+  function renderCalendar(entries) {
+    const byDate = Object.fromEntries(entries.map(e => [e.date, e]));
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const days = [];
+    for (let i = 34; i >= 0; i--) {
+      const d = new Date(); d.setDate(d.getDate() - i);
+      days.push(d.toISOString().slice(0, 10));
+    }
+    const dow = ["S","M","T","W","T","F","S"];
+    const grid = $("calGrid");
+    grid.innerHTML = dow.map(d => `<div class="cal-dow">${d}</div>`).join("");
+    days.forEach((dateStr, idx) => {
+      const entry = byDate[dateStr];
+      const cls = entry?.done ? "done" : entry?.partial ? "partial" : "";
+      const isToday = dateStr === todayStr;
+      const cell = document.createElement("div");
+      cell.className = `cal-cell ${cls}${isToday ? " today" : ""}`.trim();
+      cell.style.animationDelay = `${idx * 8}ms`;
+      cell.textContent = new Date(dateStr).getDate();
+      cell.title = dateStr;
+      grid.appendChild(cell);
+    });
+    const first = new Date(days[0]);
+    $("calTitle").textContent = `${first.toLocaleDateString(undefined,{month:"short",day:"numeric"})} – today`;
   }
 
   supabase.auth.onAuthStateChange((_event) => { boot(); });

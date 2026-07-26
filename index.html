@@ -308,8 +308,12 @@
         <h3 style="font-size:15px;margin-bottom:10px">Goals</h3>
         <div class="row" style="margin-bottom:8px">
           <input type="text" id="addGoalInput" placeholder="e.g. Get ACCA certified" style="margin-bottom:0" onkeydown="if(event.key==='Enter')addGoal()" />
+          <button class="btn-ghost btn-small" style="flex:0 0 auto;width:auto" onclick="document.getElementById('goalFileInput').click()" title="Attach a document, PDF, or pasted notes">📎</button>
+          <button class="btn-ghost btn-small" id="goalVoiceBtn" style="flex:0 0 auto;width:auto" onclick="toggleGoalVoice()" title="Record a voice note">🎙️</button>
           <button class="btn-ghost btn-small" style="flex:0 0 auto;width:auto" onclick="addGoal()">Add</button>
         </div>
+        <input type="file" accept=".pdf,.doc,.docx,.txt" id="goalFileInput" style="display:none" onchange="handleGoalFile()" />
+        <div class="file-preview" id="goalAttachPreview"></div>
         <div id="goalsList"></div>
       </div>
 
@@ -1068,12 +1072,16 @@
     const el = $("goalsList");
     if (!goals.length) { el.innerHTML = `<p class="muted">No goals yet — add something ongoing you're working toward.</p>`; return; }
     el.innerHTML = goals.map(g => `
-      <div class="roster-row">
-        <span style="${g.status === 'done' ? 'text-decoration:line-through;color:var(--paper-dim)' : ''}">${g.title}</span>
-        <span class="row" style="gap:6px">
-          <button class="btn-ghost btn-small" style="width:auto;padding:6px 12px" onclick="toggleGoal(${g.id}, ${g.status !== 'done'})">${g.status === 'done' ? 'Reopen' : 'Done'}</button>
-          <button class="btn-ghost btn-small" style="width:auto;padding:6px 12px" onclick="deleteGoal(${g.id})">Remove</button>
-        </span>
+      <div class="roster-row" style="flex-direction:column;align-items:stretch">
+        <div class="row" style="justify-content:space-between">
+          <span style="${g.status === 'done' ? 'text-decoration:line-through;color:var(--paper-dim)' : ''}">${g.title}</span>
+          <span class="row" style="gap:6px;flex:0 0 auto">
+            <button class="btn-ghost btn-small" style="width:auto;padding:6px 12px" onclick="toggleGoal(${g.id}, ${g.status !== 'done'})">${g.status === 'done' ? 'Reopen' : 'Done'}</button>
+            <button class="btn-ghost btn-small" style="width:auto;padding:6px 12px" onclick="deleteGoal(${g.id})">Remove</button>
+          </span>
+        </div>
+        ${g.motivation_line ? `<p class="muted" style="margin:6px 0 0;font-style:italic">💬 ${g.motivation_line}</p>` : ""}
+        ${Array.isArray(g.ai_plan) && g.ai_plan.length ? `<ul style="margin:6px 0 0;padding-left:18px;font-size:13px;color:var(--paper-dim)">${g.ai_plan.map(s => `<li>${s}</li>`).join("")}</ul>` : ""}
       </div>`).join("");
   }
 
@@ -1082,12 +1090,70 @@
     if (!result.error) renderGoals(result.goals || []);
   }
 
+  // Goal attachments: a document/PDF (sent as base64, same pattern as evidence uploads)
+  // or a single voice note recorded inline — one attachment at a time.
+  let pendingGoalFile = null;   // { fileData, mimeType }
+  let pendingGoalVoice = null;  // { blob, mimeType }
+  let goalRecorder = null;
+
+  window.handleGoalFile = async function () {
+    const input = $("goalFileInput");
+    const file = input.files && input.files[0];
+    if (!file) return;
+    pendingGoalVoice = null;
+    const fileData = await fileToBase64(file);
+    pendingGoalFile = { fileData, mimeType: file.type || "application/octet-stream" };
+    $("goalAttachPreview").textContent = `📎 ${file.name}`;
+    $("goalAttachPreview").style.display = "block";
+  };
+
+  window.toggleGoalVoice = async function () {
+    const btn = $("goalVoiceBtn");
+    if (goalRecorder && goalRecorder.state === "recording") {
+      goalRecorder.stop();
+      btn.textContent = "🎙️";
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/mp4";
+      goalRecorder = new MediaRecorder(stream, { mimeType });
+      const chunks = [];
+      goalRecorder.ondataavailable = (e) => chunks.push(e.data);
+      goalRecorder.onstop = () => {
+        pendingGoalFile = null;
+        const blob = new Blob(chunks, { type: mimeType });
+        pendingGoalVoice = { blob, mimeType };
+        $("goalAttachPreview").textContent = `🎙️ Voice note recorded (${Math.round(blob.size / 1024)}KB)`;
+        $("goalAttachPreview").style.display = "block";
+        stream.getTracks().forEach(t => t.stop());
+      };
+      goalRecorder.start();
+      btn.textContent = "⏹️";
+    } catch {
+      $("goalAttachPreview").textContent = "Couldn't access the microphone.";
+      $("goalAttachPreview").style.display = "block";
+    }
+  };
+
   window.addGoal = async function () {
     const title = $("addGoalInput").value.trim();
     if (!title) return;
-    const result = await apiCall("/goal", { method: "POST", body: JSON.stringify({ title }) });
+    const body = { title };
+    if (pendingGoalFile) {
+      body.fileData = pendingGoalFile.fileData;
+      body.mimeType = pendingGoalFile.mimeType;
+    } else if (pendingGoalVoice) {
+      body.fileData = await fileToBase64(pendingGoalVoice.blob);
+      body.mimeType = pendingGoalVoice.mimeType;
+    }
+    const result = await apiCall("/goal", { method: "POST", body: JSON.stringify(body) });
     if (result.error) return;
     $("addGoalInput").value = "";
+    pendingGoalFile = null;
+    pendingGoalVoice = null;
+    $("goalAttachPreview").style.display = "none";
+    $("goalFileInput").value = "";
     loadGoals().catch(() => {});
   };
 

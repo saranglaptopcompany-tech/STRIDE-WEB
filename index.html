@@ -81,14 +81,14 @@
   .cal-card{ background:var(--ink-2); border:1px solid var(--line); border-radius:14px; padding:20px 22px; margin-bottom:14px; }
   .cal-title{ font-size:13px; color:var(--paper-dim); margin-bottom:12px; }
   .cal-grid{ display:grid; grid-template-columns: repeat(7, 1fr); gap:6px; }
-  .cal-dow{ font-size:10px; color:var(--paper-dim); text-align:center; padding-bottom:2px; }
+  .cal-dow{ font-size:10px; color:var(--paper-dim); text-align:center; padding-bottom:2px; font-weight:600; }
   .cal-cell{
-    aspect-ratio:1; border-radius:7px; display:flex; align-items:center; justify-content:center;
-    font-size:11px; color:var(--paper-dim); background:var(--ink-3); border:1px solid transparent;
+    aspect-ratio:1; min-height:26px; border-radius:7px; display:flex; align-items:center; justify-content:center;
+    font-size:12px; font-weight:600; color:var(--paper); background:var(--ink-3); border:1px solid var(--line);
   }
-  .cal-cell.done{ background:var(--moss); color:#101410; font-weight:600; }
-  .cal-cell.partial{ background:rgba(224,164,88,0.35); color:var(--ink); font-weight:600; }
-  .cal-cell.today{ border-color:var(--moss); }
+  .cal-cell.done{ background:var(--moss); color:#101410; border-color:var(--moss); }
+  .cal-cell.partial{ background:var(--amber); color:#191510; border-color:var(--amber); }
+  .cal-cell.today{ box-shadow:0 0 0 2px var(--moss); }
   .cal-legend{ display:flex; gap:14px; margin-top:12px; font-size:11px; color:var(--paper-dim); }
   .cal-legend span{ display:inline-flex; align-items:center; gap:5px; }
   .cal-dot{ width:9px; height:9px; border-radius:3px; display:inline-block; }
@@ -184,7 +184,9 @@
 </div>
 
 <div class="wrap">
-  <div id="loading"><span class="muted">Loading…</span></div>
+  <div id="loading">
+    <span class="muted" id="loadingText">Loading…</span>
+  </div>
 
   <!-- ===== SIGNED OUT ===== -->
   <div id="view-signedout" class="card" style="display:none">
@@ -237,7 +239,11 @@
       <div class="card">
         <p class="muted" style="margin:0 0 10px">Type anything — same commands as Telegram: "add task: ...", "/status", "/help", "/paid"</p>
         <div id="commandLog"></div>
-        <input type="text" id="commandInput" placeholder="Type a message…" onkeydown="if(event.key==='Enter')sendCommand()" />
+        <div class="row">
+          <input type="text" id="commandInput" placeholder="Type a message…" onkeydown="if(event.key==='Enter')sendCommand()" style="margin-bottom:0;flex:1" />
+          <button class="btn-ghost btn-small" style="width:auto;flex:0 0 auto" onclick="$('quickPhotoInput').click()" title="Send a photo">📷</button>
+        </div>
+        <input type="file" accept="image/*" capture="environment" id="quickPhotoInput" style="display:none" onchange="sendQuickPhoto()" />
         <button class="btn-ghost btn-small" onclick="sendCommand()">Send</button>
       </div>
     </div>
@@ -258,7 +264,7 @@
         <div class="cal-grid" id="calGrid"></div>
         <div class="cal-legend">
           <span><i class="cal-dot" style="background:var(--moss)"></i> Completed</span>
-          <span><i class="cal-dot" style="background:rgba(224,164,88,0.35)"></i> Partial</span>
+          <span><i class="cal-dot" style="background:var(--amber)"></i> Partial</span>
           <span><i class="cal-dot" style="background:var(--ink-3)"></i> No data</span>
         </div>
       </div>
@@ -462,7 +468,8 @@
     const input = $(`ev-photo-${taskId}`);
     const file = input.files?.[0];
     if (!file) return;
-    (pendingFiles[taskId] ??= {}).photo = file;
+    if (!pendingFiles[taskId]) pendingFiles[taskId] = {};
+    pendingFiles[taskId].photo = file;
     $(`ev-photo-preview-${taskId}`).textContent = `Selected: ${file.name}`;
     $(`ev-photo-preview-${taskId}`).style.display = "block";
     $(`ev-photo-submit-${taskId}`).disabled = false;
@@ -479,7 +486,8 @@
       recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
       recorder.onstop = () => {
         const blob = new Blob(chunks, { type: mimeType });
-        (pendingFiles[taskId] ??= {}).voice = { blob, mimeType };
+        if (!pendingFiles[taskId]) pendingFiles[taskId] = {};
+        pendingFiles[taskId].voice = { blob, mimeType };
         $(`ev-voice-preview-${taskId}`).textContent = `Recorded ${Math.round(blob.size/1024)}KB`;
         $(`ev-voice-preview-${taskId}`).style.display = "block";
         $(`ev-voice-submit-${taskId}`).disabled = false;
@@ -662,6 +670,8 @@
   // Hits a new /command endpoint on web-api, which should run the SAME text-parsing
   // logic already in edge-function/index.ts (add task / delete task / /status / /help /
   // /paid etc.) so behavior matches Telegram exactly. Expects { reply: "..." } back.
+  let latestTasks = [];
+
   window.sendCommand = async function () {
     const input = $("commandInput");
     const text = input.value.trim();
@@ -681,7 +691,49 @@
 
     // Some commands change your data (add task, /status, etc.) — refresh the view.
     const today = await apiCall("/today");
-    renderTasks(today.tasks || []);
+    latestTasks = today.tasks || [];
+    renderTasks(latestTasks);
+  };
+
+  // ---------- Quick photo (camera button next to the command box) ----------
+  // For "I just want to snap proof right now" without opening a specific task first.
+  // Attaches it to the first pending task today, same as tapping "Add evidence" ->
+  // Photo on that task would — reuses the existing /evidence endpoint rather than
+  // inventing a second upload path.
+  window.sendQuickPhoto = async function () {
+    const input = $("quickPhotoInput");
+    const file = input.files && input.files[0];
+    if (!file) return;
+
+    const target = latestTasks.find(t => t.status === "pending");
+    const log = $("commandLog");
+    if (!target) {
+      log.insertAdjacentHTML("beforeend", `<div class="cmd-reply">No pending task to attach that photo to today.</div>`);
+      log.scrollTop = log.scrollHeight;
+      input.value = "";
+      return;
+    }
+
+    log.insertAdjacentHTML("beforeend", `<div class="cmd-you">📷 Photo for "${target.title}"</div>`);
+    log.scrollTop = log.scrollHeight;
+
+    try {
+      const fileData = await fileToBase64(file);
+      const result = await apiCall("/evidence", {
+        method: "POST",
+        body: JSON.stringify({ taskId: target.id, evidenceType: "photo", fileData, mimeType: file.type }),
+      });
+      log.insertAdjacentHTML("beforeend",
+        `<div class="cmd-reply">${result.saved ? "Saved — reviewed each morning." : (result.error || "Upload failed.")}</div>`);
+    } catch (err) {
+      log.insertAdjacentHTML("beforeend", `<div class="cmd-reply">Upload failed — try again.</div>`);
+    }
+    log.scrollTop = log.scrollHeight;
+    input.value = "";
+
+    const today = await apiCall("/today");
+    latestTasks = today.tasks || [];
+    renderTasks(latestTasks);
   };
 
   // ---------- Roster ----------
@@ -718,7 +770,8 @@
     } else {
       $("greeting").textContent = `Hi, ${me.user.name || "there"}`;
       const today = await apiCall("/today");
-      renderTasks(today.tasks || []);
+      latestTasks = today.tasks || [];
+      renderTasks(latestTasks);
       renderScore(today.streak || { current: 0, longest: 0, score: 0 });
       renderCalendar(today.calendar || []);
       showOnly("view-dashboard");
@@ -792,12 +845,38 @@
     $("calTitle").textContent = `${first.toLocaleDateString(undefined,{month:"short",day:"numeric"})} – today`;
   }
 
-  supabase.auth.onAuthStateChange((_event) => { boot(); });
-  boot();
+  supabase.auth.onAuthStateChange((_event) => { boot().catch(showBootError); });
+  boot().catch(showBootError);
+
+  function showBootError(err) {
+    console.error(err);
+    const el = $("loadingText");
+    if (el) {
+      el.innerHTML = "Something went wrong loading Stride.<br><br>" +
+        '<button class="btn-ghost btn-small" style="width:auto;padding:8px 16px" onclick="location.reload()">Try again</button>';
+    }
+  }
 
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("service-worker.js").catch(() => {});
   }
+</script>
+
+<!-- Plain (non-module) script on purpose: if the module script above ever fails to
+     parse or run — an unsupported syntax feature on an older phone browser, a network
+     hiccup loading the module, anything — this still runs and turns the infinite
+     spinner into an actual message with a way forward, instead of a blank stuck screen. -->
+<script>
+  setTimeout(function () {
+    var loading = document.getElementById("loading");
+    if (loading && loading.style.display !== "none") {
+      var el = document.getElementById("loadingText");
+      if (el) {
+        el.innerHTML = "This is taking longer than expected.<br><br>" +
+          '<button class="btn-ghost btn-small" style="width:auto;padding:8px 16px" onclick="location.reload()">Try again</button>';
+      }
+    }
+  }, 8000);
 </script>
 </body>
 </html>

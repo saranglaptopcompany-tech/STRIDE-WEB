@@ -18,16 +18,18 @@
     --line: rgba(237,234,224,0.12);
     --shadow: 0 1px 2px rgba(0,0,0,0.3);
   }
-  /* Light theme: same identity (paper/ink/moss/amber), roles inverted rather than a
-     different palette — so switching themes never feels like a different product. */
+  /* Light theme: a soft sage backdrop (not stark white) with a deep forest-green text
+     color and a proper contrast ladder between background → card → chip layers, plus a
+     stronger border so sections are actually distinguishable — the old version used
+     near-white-on-white with a 10%-opacity border, which is why it read as "too light". */
   html[data-theme="light"]{
-    --ink:#EDEAE0; --ink-2:#FFFFFF; --ink-3:#E4E0D2;
-    --paper:#211F19; --paper-dim:#6B6759;
-    --moss:#5C7A48; --moss-dim:#3F5533;
-    --amber:#B5762A;
+    --ink:#EAF0E3; --ink-2:#FFFFFF; --ink-3:#DCE7D2;
+    --paper:#1E2A18; --paper-dim:#5B6B52;
+    --moss:#4C7A3C; --moss-dim:#3A5C2E;
+    --amber:#B9812F;
     --red:#B14E30;
-    --line: rgba(33,31,25,0.10);
-    --shadow: 0 1px 3px rgba(33,31,25,0.08);
+    --line: rgba(30,42,24,0.16);
+    --shadow: 0 1px 3px rgba(30,42,24,0.10);
   }
   html{ color-scheme: dark; }
   html[data-theme="light"]{ color-scheme: light; }
@@ -49,11 +51,15 @@
     border-radius:20px; padding:6px 12px; font-size:12px; cursor:pointer; display:flex; align-items:center; gap:6px;
   }
   .theme-toggle:hover{ border-color:var(--moss-dim); color:var(--paper); }
+  #helpButton{
+    width:30px; height:30px; padding:0; border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-family:'Fraunces',serif; font-weight:600;
+  }
 
   /* ---------- Desktop layout: single column becomes a two-column dashboard ---------- */
-  #loading, #view-signedout, #view-needscode, #view-dashboard, #view-roster{ display:none; }
+  #loading, #view-signedout, #view-needscode, #view-dashboard, #view-roster, #view-onboarding{ display:none; }
   #loading:not(.view-hidden){ display:flex; }
-  #view-signedout:not(.view-hidden), #view-needscode:not(.view-hidden), #view-roster:not(.view-hidden){ display:block; }
+  #view-signedout:not(.view-hidden), #view-needscode:not(.view-hidden), #view-roster:not(.view-hidden), #view-onboarding:not(.view-hidden){ display:block; }
   #view-dashboard:not(.view-hidden){ display:block; }
 
   @media (min-width: 900px){
@@ -98,6 +104,26 @@
   .cal-legend{ display:flex; gap:14px; margin-top:12px; font-size:11px; color:var(--paper-dim); }
   .cal-legend span{ display:inline-flex; align-items:center; gap:5px; }
   .cal-dot{ width:9px; height:9px; border-radius:3px; display:inline-block; }
+
+  .cal-month-nav{ display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+  .cal-title{ font-size:14px; font-weight:600; color:var(--paper); margin-bottom:0; font-family:'Fraunces',serif; }
+  .cal-nav-btn{
+    width:28px; height:28px; border-radius:50%; border:1px solid var(--line); background:var(--ink-3);
+    color:var(--paper); font-size:15px; cursor:pointer; display:flex; align-items:center; justify-content:center;
+  }
+  .cal-nav-btn:hover{ border-color:var(--moss-dim); color:var(--moss); }
+
+  .summary-chips{ display:flex; flex-wrap:wrap; gap:6px; margin-top:14px; }
+  .summary-chip{
+    border:1px solid var(--line); background:var(--ink-3); color:var(--paper-dim);
+    border-radius:20px; padding:5px 12px; font-size:12px; cursor:pointer;
+  }
+  .summary-chip:hover{ border-color:var(--moss-dim); color:var(--paper); }
+  .summary-chip.active{ background:var(--moss); border-color:var(--moss); color:#101410; font-weight:600; }
+  .summary-panel{ margin-top:12px; padding:12px 14px; background:var(--ink-3); border-radius:10px; font-size:13px; }
+  .summary-panel.hidden{ display:none; }
+  .summary-panel .summary-row{ display:flex; justify-content:space-between; padding:3px 0; }
+  .summary-panel .summary-row span:first-child{ color:var(--paper-dim); }
   .card{ background:var(--ink-2); border:1px solid var(--line); border-radius:14px; padding:22px; margin-bottom:14px; }
   p.lead{ color:var(--paper-dim); font-size:15px; line-height:1.5; margin:6px 0 20px; }
   input[type=text]{
@@ -229,7 +255,10 @@
 
 <div class="brand">
   <div class="brand-left"><div class="mark"></div><span>Stride</span></div>
-  <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()">🌙 <span id="themeLabel">Dark</span></button>
+  <div style="display:flex;align-items:center;gap:8px">
+    <button class="theme-toggle" id="helpButton" onclick="showWelcome()" title="What does everything do?" aria-label="Help">?</button>
+    <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()">🌙 <span id="themeLabel">Dark</span></button>
+  </div>
 </div>
 
 <div class="wrap">
@@ -292,6 +321,23 @@
     </div>
   </div>
 
+  <!-- ===== ONBOARDING (quick setup questions, right after joining) ===== -->
+  <div id="view-onboarding" class="card">
+    <h2>Quick setup</h2>
+    <p class="lead" id="onboardingQuestion" style="margin-bottom:16px">—</p>
+    <textarea id="onboardingAnswerInput" placeholder="Type your answer…" rows="3" style="margin-bottom:0"></textarea>
+    <button class="btn-primary" onclick="submitOnboardingAnswer()" style="margin-top:12px">Next</button>
+    <p class="error" id="onboardingError"></p>
+
+    <div id="onboardingPlan" class="hidden" style="margin-top:20px">
+      <h3 style="margin-bottom:8px">Here's a starting plan</h3>
+      <p class="muted" id="onboardingPlanSummary" style="margin:0 0 10px"></p>
+      <div id="onboardingPlanSteps"></div>
+      <p class="muted" id="onboardingPlanMilestone" style="margin:10px 0 0"></p>
+      <button class="btn-primary" onclick="finishOnboarding()" style="margin-top:16px">Go to my dashboard</button>
+    </div>
+  </div>
+
   <!-- ===== DASHBOARD (student / employee / individual) ===== -->
   <div id="view-dashboard">
     <div class="top-actions">
@@ -341,9 +387,8 @@
 
       <div class="card" id="taskList"></div>
 
-      <!-- ===== COMMAND BOX (same free-text commands as the Telegram bot) ===== -->
+      <!-- ===== COMMAND BOX (plain language — tap the ? above if you want the full guide) ===== -->
       <div class="card">
-        <p class="muted" style="margin:0 0 10px">Type anything — same commands as Telegram: "add task: ...", "/status", "/help", "/paid"</p>
         <div id="commandLog"></div>
         <div class="row">
           <input type="text" id="commandInput" placeholder="Type a message…" onkeydown="if(event.key==='Enter')sendCommand()" style="margin-bottom:0;flex:1" />
@@ -364,15 +409,38 @@
         <div class="streak-chip" id="streakChip">🔥 0 day streak</div>
       </div>
 
-      <!-- ===== Streak calendar ===== -->
+      <!-- ===== Starter plan (from onboarding, refreshed at most once/day on goal edits) ===== -->
+      <div class="card" id="starterPlanCard" style="display:none">
+        <h3 style="font-size:15px;margin-bottom:8px">Your starter plan</h3>
+        <p class="muted" id="starterPlanSummary" style="margin:0 0 8px"></p>
+        <div id="starterPlanSteps"></div>
+        <p class="muted" id="starterPlanMilestone" style="margin:8px 0 0"></p>
+      </div>
+
+      <!-- ===== Calendar: month-navigable, plus period-summary shortcuts ===== -->
       <div class="cal-card">
-        <div class="cal-title" id="calTitle">Last 5 weeks</div>
+        <div class="cal-month-nav">
+          <button class="cal-nav-btn" onclick="pageCalendarMonth(-1)" title="Previous month">‹</button>
+          <div class="cal-title" id="calTitle">—</div>
+          <button class="cal-nav-btn" onclick="pageCalendarMonth(1)" title="Next month">›</button>
+        </div>
         <div class="cal-grid" id="calGrid"></div>
         <div class="cal-legend">
           <span><i class="cal-dot" style="background:var(--moss)"></i> Completed</span>
           <span><i class="cal-dot" style="background:var(--amber)"></i> Partial</span>
           <span><i class="cal-dot" style="background:var(--ink-3)"></i> No data</span>
         </div>
+
+        <div class="summary-chips" id="summaryChips">
+          <button class="summary-chip" data-range="3d" onclick="loadSummary('3d')">3d</button>
+          <button class="summary-chip" data-range="7d" onclick="loadSummary('7d')">7d</button>
+          <button class="summary-chip" data-range="15d" onclick="loadSummary('15d')">15d</button>
+          <button class="summary-chip" data-range="30d" onclick="loadSummary('30d')">30d</button>
+          <button class="summary-chip" data-range="3m" onclick="loadSummary('3m')">3mo</button>
+          <button class="summary-chip" data-range="6m" onclick="loadSummary('6m')">6mo</button>
+          <button class="summary-chip" data-range="1y" onclick="loadSummary('1y')">1yr</button>
+        </div>
+        <div id="summaryPanel" class="summary-panel hidden"></div>
       </div>
 
       <!-- ===== Friends ===== -->
@@ -468,7 +536,7 @@
   }
   const show = (id) => { $(id).classList.remove("view-hidden"); };
   const hide = (id) => { $(id).classList.add("view-hidden"); };
-  const ALL_VIEWS = ["loading","view-signedout","view-needscode","view-dashboard","view-roster"];
+  const ALL_VIEWS = ["loading","view-signedout","view-needscode","view-dashboard","view-roster","view-onboarding"];
   function showOnly(id){ ALL_VIEWS.forEach(v => v===id ? show(v) : hide(v)); }
 
   async function apiCall(path, options = {}) {
@@ -546,6 +614,39 @@
     if (!code) return;
     const result = await apiCall("/join", { method: "POST", body: JSON.stringify({ code }) });
     if (result.error) { $("joinError").textContent = result.error; return; }
+    await boot();
+  };
+
+  window.submitOnboardingAnswer = async function () {
+    const answer = $("onboardingAnswerInput").value.trim();
+    $("onboardingError").textContent = "";
+    if (!answer) { $("onboardingError").textContent = "Type an answer first."; return; }
+
+    const result = await apiCall("/onboarding-answer", { method: "POST", body: JSON.stringify({ answer }) });
+    if (result.error) { $("onboardingError").textContent = result.error; return; }
+    $("onboardingAnswerInput").value = "";
+
+    if (!result.done) {
+      $("onboardingQuestion").textContent = result.nextQuestion || "—";
+      return;
+    }
+
+    // Onboarding just finished — show the cached starter plan right here if Gemini
+    // returned one in time, otherwise skip straight to the dashboard.
+    if (result.starterPlan) {
+      $("onboardingQuestion").textContent = "All set!";
+      $("onboardingPlanSummary").textContent = result.starterPlan.summary || "";
+      $("onboardingPlanSteps").innerHTML = (result.starterPlan.first_steps || [])
+        .map(s => `<div class="roster-row">${s}</div>`).join("");
+      $("onboardingPlanMilestone").textContent = result.starterPlan.milestone
+        ? `30-day milestone: ${result.starterPlan.milestone}` : "";
+      $("onboardingPlan").classList.remove("hidden");
+    } else {
+      await finishOnboarding();
+    }
+  };
+
+  window.finishOnboarding = async function () {
     await boot();
   };
 
@@ -873,6 +974,9 @@
     ["📋", "Today", "Your tasks for today. New ones are picked for you automatically each morning — you don't add these yourself."],
     ["●", "The dots up top", "One dot per task. It fills in green as you complete tasks, so you can see your progress at a glance."],
     ["✍️", "Add evidence", "Tap this on any task to show you did it — as text, a photo, or a voice note. Pick whichever's easiest for that task."],
+    ["💬", "Type anything", "The message box understands plain language now — \"add getting fit\" works just as well as an exact command."],
+    ["🎯", "Goals", "Ongoing things you're working toward, separate from daily tasks. Attach a photo, document, or pasted notes. Editing a goal's wording is limited to once a day, and gets tidied up automatically."],
+    ["📅", "Calendar", "Use ‹ › to move between months. The buttons below it (3/7/15/30 days, 3/6 months, 1 year) show your completion summary for that stretch."],
     ["🔔", "The bell", "Turns on notifications, so you get a nudge here even when you're not checking Telegram."],
     ["✅", "Review timing", "Evidence isn't graded instantly — it's reviewed together each morning, and the task's status updates then."],
   ];
@@ -1024,6 +1128,13 @@
 
     applyTheme(me.user.theme_preference === "light" ? "light" : "dark", false);
 
+    if (!me.user.onboarding_complete && me.user.onboarding_step > 0) {
+      $("onboardingQuestion").textContent = me.onboardingQuestion || "—";
+      $("onboardingPlan").classList.add("hidden");
+      showOnly("view-onboarding");
+      return;
+    }
+
     const rosterRoles = ["teacher", "principal", "manager", "admin"];
     if (rosterRoles.includes(me.user.account_role)) {
       const roster = await apiCall("/roster");
@@ -1040,13 +1151,15 @@
       latestTasks = today.tasks || [];
       renderTasks(latestTasks);
       renderScore(today.streak || { current: 0, longest: 0, score: 0 });
-      renderCalendar(today.calendar || []);
+      calendarCursor = new Date();
+      loadCalendarMonth();
       showOnly("view-dashboard");
       renderStatusLine(me.user);
       await refreshBellState();
       maybeAutoShowWelcome(me.user.account_role, me.user);
       loadFriends().catch((err) => console.error("Friends load failed:", err));
       loadGoals().catch((err) => console.error("Goals load failed:", err));
+      loadStarterPlan().catch((err) => console.error("Starter plan load failed:", err));
     }
   }
 
@@ -1058,6 +1171,7 @@
     document.documentElement.setAttribute("data-theme", theme);
     $("themeLabel").textContent = theme === "light" ? "Light" : "Dark";
     $("themeToggle").firstChild.textContent = theme === "light" ? "☀️ " : "🌙 ";
+    document.querySelector('meta[name="theme-color"]').setAttribute("content", theme === "light" ? "#EAF0E3" : "#12140F");
     localStorage.setItem("stride_theme", theme);
     if (persist) apiCall("/theme", { method: "PATCH", body: JSON.stringify({ theme }) }).catch(() => {});
   }
@@ -1084,47 +1198,79 @@
     requestAnimationFrame(tick);
   }
 
-  // ---------- Streak calendar ----------
-  // Last 35 days as a 5-week grid (Sun-Sat columns), newest week at the bottom, filled
-  // in the same moss/amber language as task status elsewhere — one visual vocabulary
-  // for "done" everywhere in the app, not a separate calendar color scheme.
-  function renderCalendar(entries) {
-    const byDate = Object.fromEntries(entries.map(e => [e.date, e]));
+  // ---------- Month-navigable calendar ----------
+  // Backed by GET /calendar?month=YYYY-MM. `calendarCursor` tracks which month is
+  // currently shown; ‹ › just move it a month at a time and re-fetch.
+  let calendarCursor = new Date(); // day-of-month doesn't matter, only year/month
+
+  async function loadCalendarMonth() {
+    const monthParam = `${calendarCursor.getFullYear()}-${String(calendarCursor.getMonth() + 1).padStart(2, "0")}`;
+    const data = await apiCall(`/calendar?month=${monthParam}`);
+    if (data.error) return;
+    renderCalendar(data);
+  }
+
+  window.pageCalendarMonth = function (delta) {
+    calendarCursor = new Date(calendarCursor.getFullYear(), calendarCursor.getMonth() + delta, 1);
+    loadCalendarMonth();
+  };
+
+  function renderCalendar(data) {
+    const byDate = Object.fromEntries((data.days || []).map(e => [e.date, e]));
     const todayStr = new Date().toISOString().slice(0, 10);
-
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - 34);
-
-    const days = [];
-    for (let i = 34; i >= 0; i--) {
-      const d = new Date(); d.setDate(d.getDate() - i);
-      days.push(d.toISOString().slice(0, 10));
-    }
     const dow = ["S","M","T","W","T","F","S"];
     const grid = $("calGrid");
     grid.innerHTML = dow.map(d => `<div class="cal-dow">${d}</div>`).join("");
 
-    // Pad the front of the grid so the first day lands under its real weekday
-    // column, instead of always being forced into Sunday's slot regardless of
-    // what day it actually falls on.
-    const leadingBlanks = startDate.getDay();
-    for (let b = 0; b < leadingBlanks; b++) {
+    // Pad the front so day 1 lands under its real weekday column.
+    for (let b = 0; b < data.firstWeekday; b++) {
       grid.appendChild(document.createElement("div"));
     }
 
-    days.forEach((dateStr, idx) => {
+    for (let day = 1; day <= data.daysInMonth; day++) {
+      const dateStr = `${data.year}-${String(data.month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
       const entry = byDate[dateStr];
       const cls = entry?.done ? "done" : entry?.partial ? "partial" : "";
       const isToday = dateStr === todayStr;
       const cell = document.createElement("div");
       cell.className = `cal-cell ${cls}${isToday ? " today" : ""}`.trim();
-      cell.style.animationDelay = `${idx * 8}ms`;
-      cell.textContent = new Date(dateStr).getDate();
+      cell.style.animationDelay = `${(day - 1) * 8}ms`;
+      cell.textContent = day;
       cell.title = dateStr;
       grid.appendChild(cell);
-    });
-    const first = new Date(days[0]);
-    $("calTitle").textContent = `${first.toLocaleDateString(undefined,{month:"short",day:"numeric"})} – today`;
+    }
+    $("calTitle").textContent = data.monthLabel;
+  }
+
+  // ---------- Period summaries (3d/7d/15d/30d/3mo/6mo/1yr) ----------
+  const RANGE_LABEL = { "3d": "3 days", "7d": "7 days", "15d": "15 days", "30d": "30 days", "3m": "3 months", "6m": "6 months", "1y": "1 year" };
+
+  window.loadSummary = async function (range) {
+    document.querySelectorAll(".summary-chip").forEach(b => b.classList.toggle("active", b.dataset.range === range));
+    const panel = $("summaryPanel");
+    panel.classList.remove("hidden");
+    panel.innerHTML = `<p class="muted" style="margin:0">Loading…</p>`;
+
+    const data = await apiCall(`/summary?range=${range}`);
+    if (data.error) { panel.innerHTML = `<p class="error" style="margin:0">${data.error}</p>`; return; }
+
+    panel.innerHTML = `
+      <div class="summary-row"><span>Last ${RANGE_LABEL[range]}</span><span><b>${data.avgCompletion}%</b> avg completion</span></div>
+      <div class="summary-row"><span>Perfect days</span><span>${data.perfectDays} / ${data.daysLogged}</span></div>
+      ${data.flaggedTotal > 0 ? `<div class="summary-row"><span>Flagged for review</span><span>${data.flaggedTotal}</span></div>` : ""}
+    `;
+  };
+
+  // ---------- Starter plan (cached from onboarding / most recent goal edit) ----------
+  async function loadStarterPlan() {
+    const data = await apiCall("/starter-plan");
+    if (!data.starterPlan) { $("starterPlanCard").style.display = "none"; return; }
+    $("starterPlanSummary").textContent = data.starterPlan.summary || "";
+    $("starterPlanSteps").innerHTML = (data.starterPlan.first_steps || [])
+      .map(s => `<div class="roster-row">${s}</div>`).join("");
+    $("starterPlanMilestone").textContent = data.starterPlan.milestone
+      ? `30-day milestone: ${data.starterPlan.milestone}` : "";
+    $("starterPlanCard").style.display = "";
   }
 
   // ---------- Goals ----------
@@ -1135,11 +1281,22 @@
       <div class="roster-row">
         <span style="${g.status === 'done' ? 'text-decoration:line-through;color:var(--paper-dim)' : ''}">${g.title}${g.attachment_type ? ' <span title="Has an attachment">📎</span>' : ''}</span>
         <span class="row" style="gap:6px">
+          <button class="btn-ghost btn-small" style="width:auto;padding:6px 12px" onclick="editGoal(${g.id}, ${JSON.stringify(g.title)})" title="Editing is limited to once a day">Edit</button>
           <button class="btn-ghost btn-small" style="width:auto;padding:6px 12px" onclick="toggleGoal(${g.id}, ${g.status !== 'done'})">${g.status === 'done' ? 'Reopen' : 'Done'}</button>
           <button class="btn-ghost btn-small" style="width:auto;padding:6px 12px" onclick="deleteGoal(${g.id})">Remove</button>
         </span>
       </div>`).join("");
   }
+
+  window.editGoal = async function (goalId, currentTitle) {
+    const newTitle = prompt("Update this goal (limited to once a day):", currentTitle);
+    if (newTitle === null || !newTitle.trim() || newTitle.trim() === currentTitle) return;
+    const result = await apiCall("/goal", { method: "PATCH", body: JSON.stringify({ goalId, title: newTitle.trim() }) });
+    if (result.error) { showToast(result.error, true); return; }
+    showToast(`Goal updated: "${result.title}"`);
+    loadGoals().catch(() => {});
+    loadStarterPlan().catch(() => {});
+  };
 
   async function loadGoals() {
     const result = await apiCall("/goals");

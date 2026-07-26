@@ -14,6 +14,7 @@
     --paper:#EDEAE0; --paper-dim:#B9B6A9;
     --moss:#9FB88A; --moss-dim:#75886A;
     --amber:#E0A458;
+    --red:#D97757;
     --line: rgba(237,234,224,0.12);
   }
   *{box-sizing:border-box;}
@@ -42,12 +43,14 @@
     font-family:inherit; font-size:15px; font-weight:600; border-radius:9px; border:none;
     padding:13px 18px; cursor:pointer; width:100%;
   }
+  button:disabled{ opacity:0.5; cursor:default; }
   .btn-primary{ background:var(--moss); color:#101410; }
   .btn-primary:hover{ background:#B0CC9C; }
   .btn-ghost{ background:transparent; color:var(--paper); border:1px solid var(--line); }
   .btn-ghost:hover{ border-color:var(--moss-dim); }
   .btn-small{ width:auto; padding:8px 14px; font-size:13px; }
   .row{ display:flex; gap:10px; }
+  .row > button{ flex:1; }
   .muted{ color:var(--paper-dim); font-size:13px; }
   .error{ color:var(--amber); font-size:13px; margin:6px 0 0; }
   .tabs{ display:flex; gap:8px; margin-bottom:16px; }
@@ -66,13 +69,47 @@
   .status-partial, .status-not_completed{ background:rgba(224,164,88,0.18); color:var(--amber); }
   .evidence-box{ margin-top:8px; }
   .evidence-box.hidden{ display:none; }
+  .evidence-tabs{ display:flex; gap:6px; margin-bottom:8px; }
+  .evidence-tab{ flex:1; text-align:center; padding:7px; border-radius:7px; font-size:12px; cursor:pointer; color:var(--paper-dim); border:1px solid var(--line); }
+  .evidence-tab.active{ color:var(--ink); background:var(--moss-dim); border-color:var(--moss-dim); font-weight:600; }
+  .evidence-pane{ display:none; }
+  .evidence-pane.active{ display:block; }
+  .file-preview{ font-size:12px; color:var(--moss); margin:6px 0; display:none; }
+  .rec-indicator{ font-size:13px; color:var(--red); margin:6px 0; display:none; align-items:center; gap:6px; }
+  .rec-dot{ width:8px; height:8px; border-radius:50%; background:var(--red); animation:pulse 1s infinite; }
+  @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:0.3;} }
   .saved-tag{ font-size:12px; color:var(--moss); margin-top:6px; }
+  .hidden{ display:none; }
   .roster-row{ display:flex; justify-content:space-between; align-items:center; padding:12px 0; border-bottom:1px solid var(--line); font-size:14px; }
   .roster-row:last-child{ border-bottom:none; }
   .flag{ color:var(--amber); font-size:12px; }
   .top-actions{ display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
+  .top-actions-left{ display:flex; align-items:center; gap:10px; }
   .icon-btn{ background:none; border:none; color:var(--paper-dim); font-size:13px; width:auto; padding:4px 0; cursor:pointer; }
+  .bell-btn{ background:none; border:none; color:var(--paper-dim); font-size:18px; width:auto; padding:4px; cursor:pointer; line-height:1; }
+  .bell-btn.on{ color:var(--moss); }
   #loading{ display:flex; align-items:center; justify-content:center; flex:1; color:var(--paper-dim); }
+
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(18,20,15,0.85); display:flex;
+    align-items:center; justify-content:center; padding:20px; z-index:100;
+  }
+  .modal-overlay.hidden{ display:none; }
+  .modal-card{
+    background:var(--ink-2); border:1px solid var(--line); border-radius:16px;
+    padding:26px; max-width:440px; width:100%; max-height:85vh; overflow-y:auto;
+  }
+  .modal-card h2{ margin-bottom:4px; }
+  .feature-item{ display:flex; gap:12px; margin:18px 0; align-items:flex-start; }
+  .feature-icon{ font-size:20px; line-height:1.3; flex-shrink:0; width:26px; text-align:center; }
+  .feature-text b{ display:block; font-size:14px; margin-bottom:2px; }
+  .feature-text span{ font-size:13px; color:var(--paper-dim); line-height:1.45; }
+  .help-btn{ background:none; border:1px solid var(--line); color:var(--paper-dim); font-size:13px; width:26px; height:26px; border-radius:50%; padding:0; cursor:pointer; line-height:1; }
+  #commandLog{ max-height:220px; overflow-y:auto; margin-bottom:10px; }
+  #commandLog:empty{ display:none; }
+  .cmd-you, .cmd-reply{ font-size:13px; line-height:1.4; margin:6px 0; padding:8px 10px; border-radius:8px; white-space:pre-wrap; }
+  .cmd-you{ background:var(--ink-3); color:var(--paper); }
+  .cmd-reply{ background:rgba(159,184,138,0.12); color:var(--paper); }
 </style>
 </head>
 <body>
@@ -116,33 +153,66 @@
   <!-- ===== DASHBOARD (student / employee / individual) ===== -->
   <div id="view-dashboard" style="display:none">
     <div class="top-actions">
-      <h2 id="greeting">Today</h2>
+      <div class="top-actions-left">
+        <h2 id="greeting">Today</h2>
+        <button class="bell-btn" id="pushBell" onclick="togglePush()" title="Notifications">🔔</button>
+        <button class="help-btn" onclick="showWelcome()" title="How Stride works">?</button>
+      </div>
       <button class="icon-btn" onclick="signOut()">Sign out</button>
     </div>
+    <p class="muted" id="statusLine" style="margin:-8px 0 14px"></p>
     <div class="trail" id="trail"></div>
     <div class="card" id="taskList"></div>
+
+    <!-- ===== COMMAND BOX (same free-text commands as the Telegram bot) ===== -->
+    <div class="card">
+      <p class="muted" style="margin:0 0 10px">Type anything — same commands as Telegram: "add task: ...", "/status", "/help", "/paid"</p>
+      <div id="commandLog"></div>
+      <input type="text" id="commandInput" placeholder="Type a message…" onkeydown="if(event.key==='Enter')sendCommand()" />
+      <button class="btn-ghost btn-small" onclick="sendCommand()">Send</button>
+    </div>
   </div>
 
   <!-- ===== ROSTER (teacher / principal / manager / admin) ===== -->
   <div id="view-roster" style="display:none">
     <div class="top-actions">
-      <h2>This week's roster</h2>
+      <div class="top-actions-left">
+        <h2>This week's roster</h2>
+        <button class="help-btn" onclick="showWelcome()" title="How Stride works">?</button>
+      </div>
       <button class="icon-btn" onclick="signOut()">Sign out</button>
     </div>
+    <p class="muted" id="statusLineRoster" style="margin:-8px 0 14px"></p>
     <div class="card" id="rosterList"></div>
+  </div>
+
+  <!-- ===== WELCOME / HELP MODAL ===== -->
+  <div id="modal-welcome" class="modal-overlay hidden">
+    <div class="modal-card">
+      <h2 id="welcomeTitle">Welcome to Stride</h2>
+      <p class="lead" style="margin-bottom:4px">Here's what everything does.</p>
+      <div id="welcomeFeatures"></div>
+      <p class="muted" id="welcomeStatus" style="margin:14px 0 4px"></p>
+      <button class="btn-primary" onclick="closeWelcome()">Got it</button>
+    </div>
   </div>
 </div>
 
 <script type="module">
   // ======================================================================
-  // CONFIG — fill these three in before deploying. Find them in Supabase:
+  // CONFIG — fill these in before deploying. Find them in Supabase:
   //   Project Settings → API → Project URL            -> SUPABASE_URL
   //   Project Settings → API → anon / public key       -> SUPABASE_ANON_KEY
   //   Edge Functions → web-api → its Function URL       -> WEB_API_URL
+  // VAPID_PUBLIC_KEY is the public half of the push notification keypair — safe to
+  // expose in frontend code (that's the whole point of it being "public"). Generate
+  // it once, it never needs to change. The matching private key goes ONLY in your
+  // GitHub Secrets / Python scripts, never here.
   // ======================================================================
-  const SUPABASE_URL = "https://ynsmiydpeithbadsdlkc.supabase.co";
-  const SUPABASE_ANON_KEY = "sb_publishable_r7HqmYn6gJMtOdW5B3qRPQ_qlIrhDi9";
-  const WEB_API_URL = "https://ynsmiydpeithbadsdlkc.supabase.co/functions/v1/dynamic-api";
+  const SUPABASE_URL = "https://YOUR-PROJECT.supabase.co";
+  const SUPABASE_ANON_KEY = "YOUR-ANON-KEY";
+  const WEB_API_URL = "https://YOUR-PROJECT.supabase.co/functions/v1/web-api";
+  const VAPID_PUBLIC_KEY = "YOUR-VAPID-PUBLIC-KEY";
 
   import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
   const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -192,6 +262,8 @@
     await boot();
   };
 
+  // ---------- Evidence: text / photo / voice ----------
+
   function renderTasks(tasks) {
     const listEl = $("taskList");
     const trailEl = $("trail");
@@ -213,8 +285,33 @@
       row.innerHTML = `
         <div class="task-title">${t.title}<span class="task-status status-${t.status}">${t.status.replace("_"," ")}</span></div>
         <div class="evidence-box hidden" id="ev-${t.id}">
-          <textarea id="ev-text-${t.id}" placeholder="What did you do? Type it here..."></textarea>
-          <button class="btn-ghost btn-small" onclick="submitEvidence(${t.id})">Submit evidence</button>
+          <div class="evidence-tabs">
+            <div class="evidence-tab active" id="etab-text-${t.id}" onclick="switchEvidenceTab(${t.id},'text')">Text</div>
+            <div class="evidence-tab" id="etab-photo-${t.id}" onclick="switchEvidenceTab(${t.id},'photo')">Photo</div>
+            <div class="evidence-tab" id="etab-voice-${t.id}" onclick="switchEvidenceTab(${t.id},'voice')">Voice</div>
+          </div>
+
+          <div class="evidence-pane active" id="epane-text-${t.id}">
+            <textarea id="ev-text-${t.id}" placeholder="What did you do? Type it here..."></textarea>
+            <button class="btn-ghost btn-small" onclick="submitTextEvidence(${t.id})">Submit</button>
+          </div>
+
+          <div class="evidence-pane" id="epane-photo-${t.id}">
+            <input type="file" accept="image/*" capture="environment" id="ev-photo-${t.id}" onchange="onPhotoChosen(${t.id})" />
+            <div class="file-preview" id="ev-photo-preview-${t.id}"></div>
+            <button class="btn-ghost btn-small" id="ev-photo-submit-${t.id}" disabled onclick="submitFileEvidence(${t.id},'photo')">Submit photo</button>
+          </div>
+
+          <div class="evidence-pane" id="epane-voice-${t.id}">
+            <div class="row">
+              <button class="btn-ghost btn-small" id="ev-rec-start-${t.id}" onclick="startRecording(${t.id})">● Record</button>
+              <button class="btn-ghost btn-small hidden" id="ev-rec-stop-${t.id}" onclick="stopRecording(${t.id})">■ Stop</button>
+            </div>
+            <div class="rec-indicator" id="ev-rec-indicator-${t.id}"><span class="rec-dot"></span> Recording…</div>
+            <div class="file-preview" id="ev-voice-preview-${t.id}"></div>
+            <button class="btn-ghost btn-small" id="ev-voice-submit-${t.id}" disabled onclick="submitFileEvidence(${t.id},'voice')">Submit voice note</button>
+          </div>
+
           <div class="saved-tag hidden" id="ev-saved-${t.id}">Saved — reviewed each morning.</div>
         </div>
         <button class="btn-ghost btn-small" onclick="toggleEvidence(${t.id})">Add evidence</button>
@@ -227,15 +324,268 @@
     $(`ev-${taskId}`).classList.toggle("hidden");
   };
 
-  window.submitEvidence = async function (taskId) {
+  window.switchEvidenceTab = function (taskId, which) {
+    ["text","photo","voice"].forEach(kind => {
+      $(`etab-${kind}-${taskId}`).classList.toggle("active", kind === which);
+      $(`epane-${kind}-${taskId}`).classList.toggle("active", kind === which);
+    });
+  };
+
+  window.submitTextEvidence = async function (taskId) {
     const textContent = $(`ev-text-${taskId}`).value.trim();
     if (!textContent) return;
-    const result = await apiCall("/evidence", { method: "POST", body: JSON.stringify({ taskId, textContent }) });
-    if (result.saved) {
-      $(`ev-saved-${taskId}`).classList.remove("hidden");
-      $(`ev-text-${taskId}`).value = "";
+    const result = await apiCall("/evidence", {
+      method: "POST",
+      body: JSON.stringify({ taskId, evidenceType: "text", textContent }),
+    });
+    if (result.saved) markSaved(taskId, () => { $(`ev-text-${taskId}`).value = ""; });
+  };
+
+  function markSaved(taskId, cleanup) {
+    $(`ev-saved-${taskId}`).classList.remove("hidden");
+    if (cleanup) cleanup();
+  }
+
+  // A file (from <input type=file> or a recorded Blob) -> base64 string with no
+  // "data:...;base64," prefix, since the server expects raw base64.
+  function fileToBase64(fileOrBlob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result.split(",")[1]);
+      reader.onerror = reject;
+      reader.readAsDataURL(fileOrBlob);
+    });
+  }
+
+  const pendingFiles = {}; // taskId -> { photo: File, voice: Blob+mimeType }
+
+  window.onPhotoChosen = function (taskId) {
+    const input = $(`ev-photo-${taskId}`);
+    const file = input.files?.[0];
+    if (!file) return;
+    (pendingFiles[taskId] ??= {}).photo = file;
+    $(`ev-photo-preview-${taskId}`).textContent = `Selected: ${file.name}`;
+    $(`ev-photo-preview-${taskId}`).style.display = "block";
+    $(`ev-photo-submit-${taskId}`).disabled = false;
+  };
+
+  const activeRecorders = {}; // taskId -> MediaRecorder
+
+  window.startRecording = async function (taskId) {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/mp4";
+      const recorder = new MediaRecorder(stream, { mimeType });
+      const chunks = [];
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+      recorder.onstop = () => {
+        const blob = new Blob(chunks, { type: mimeType });
+        (pendingFiles[taskId] ??= {}).voice = { blob, mimeType };
+        $(`ev-voice-preview-${taskId}`).textContent = `Recorded ${Math.round(blob.size/1024)}KB`;
+        $(`ev-voice-preview-${taskId}`).style.display = "block";
+        $(`ev-voice-submit-${taskId}`).disabled = false;
+        stream.getTracks().forEach(tr => tr.stop());
+      };
+      recorder.start();
+      activeRecorders[taskId] = recorder;
+      $(`ev-rec-start-${taskId}`).classList.add("hidden");
+      $(`ev-rec-stop-${taskId}`).classList.remove("hidden");
+      $(`ev-rec-indicator-${taskId}`).style.display = "flex";
+    } catch (err) {
+      alert("Couldn't access the microphone. Check your browser permissions.");
     }
   };
+
+  window.stopRecording = function (taskId) {
+    const recorder = activeRecorders[taskId];
+    if (recorder && recorder.state !== "inactive") recorder.stop();
+    $(`ev-rec-start-${taskId}`).classList.remove("hidden");
+    $(`ev-rec-stop-${taskId}`).classList.add("hidden");
+    $(`ev-rec-indicator-${taskId}`).style.display = "none";
+  };
+
+  window.submitFileEvidence = async function (taskId, kind) {
+    const pending = pendingFiles[taskId] || {};
+    const submitBtn = $(`ev-${kind}-submit-${taskId}`);
+    let fileOrBlob, mimeType;
+    if (kind === "photo") {
+      fileOrBlob = pending.photo;
+      mimeType = pending.photo?.type;
+    } else {
+      fileOrBlob = pending.voice?.blob;
+      mimeType = pending.voice?.mimeType;
+    }
+    if (!fileOrBlob) return;
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Uploading…";
+    try {
+      const fileData = await fileToBase64(fileOrBlob);
+      const result = await apiCall("/evidence", {
+        method: "POST",
+        body: JSON.stringify({ taskId, evidenceType: kind, fileData, mimeType }),
+      });
+      if (result.saved) {
+        markSaved(taskId);
+        submitBtn.textContent = kind === "photo" ? "Submit photo" : "Submit voice note";
+      } else {
+        alert(result.error || "Upload failed.");
+        submitBtn.disabled = false;
+        submitBtn.textContent = kind === "photo" ? "Submit photo" : "Submit voice note";
+      }
+    } catch (err) {
+      alert("Upload failed. Try again.");
+      submitBtn.disabled = false;
+      submitBtn.textContent = kind === "photo" ? "Submit photo" : "Submit voice note";
+    }
+  };
+
+  // ---------- Push notifications ----------
+
+  function urlBase64ToUint8Array(base64String) {
+    const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+    const rawData = atob(base64);
+    return Uint8Array.from([...rawData].map(c => c.charCodeAt(0)));
+  }
+
+  async function getExistingPushSubscription() {
+    if (!("serviceWorker" in navigator)) return null;
+    const reg = await navigator.serviceWorker.ready;
+    return reg.pushManager.getSubscription();
+  }
+
+  async function refreshBellState() {
+    if (!("PushManager" in window)) { $("pushBell").style.display = "none"; return; }
+    const sub = await getExistingPushSubscription();
+    $("pushBell").classList.toggle("on", !!sub);
+  }
+
+  window.togglePush = async function () {
+    const existing = await getExistingPushSubscription();
+    if (existing) {
+      await apiCall("/push-unsubscribe", { method: "POST", body: JSON.stringify({ endpoint: existing.endpoint }) });
+      await existing.unsubscribe();
+      await refreshBellState();
+      return;
+    }
+
+    if (Notification.permission === "denied") {
+      alert("Notifications are blocked for this site in your browser settings. Enable them there, then try again.");
+      return;
+    }
+
+    const permission = await Notification.requestPermission();
+    if (permission !== "granted") return;
+
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+    });
+    await apiCall("/push-subscribe", { method: "POST", body: JSON.stringify({ subscription: sub }) });
+    await refreshBellState();
+  };
+
+  // ---------- Status: trial / plan / organization ----------
+  // Mirrors the same logic as the Telegram bot's /status command, so both
+  // surfaces always say the same thing. Expects me.user to include plan,
+  // trial_ends_at, paid_until (already there if /me does select("*") on users).
+  // organization_label is optional — only shows if your /me endpoint adds it
+  // (a join on organizations/groups, same as orgLabel() in the bot).
+  const PLAN_LABELS = { individual_paid: "Personal plan", school_paid: "Student/School plan", enterprise_paid: "Employer plan" };
+
+  function statusText(user) {
+    const today = new Date().toISOString().slice(0, 10);
+    let line;
+    if (user.plan && user.plan !== "free") {
+      line = `✅ ${PLAN_LABELS[user.plan] || user.plan}` + (user.paid_until ? ` — active until ${user.paid_until}` : "");
+    } else if (user.trial_ends_at && user.trial_ends_at >= today) {
+      const daysLeft = Math.ceil((new Date(user.trial_ends_at).getTime() - Date.now()) / 86400000);
+      line = `🕒 Free trial — ${daysLeft} day${daysLeft === 1 ? "" : "s"} left`;
+    } else {
+      line = "⚠️ Trial ended — not on a paid plan yet";
+    }
+    if (user.organization_label) line += ` · 🏢 ${user.organization_label}`;
+    return line;
+  }
+
+  function renderStatusLine(user) {
+    const text = statusText(user);
+    if ($("statusLine")) $("statusLine").textContent = text;
+    if ($("statusLineRoster")) $("statusLineRoster").textContent = text;
+  }
+
+  // ---------- Welcome / help modal ----------
+
+  const FEATURES_STUDENT = [
+    ["📋", "Today", "Your tasks for today. New ones are picked for you automatically each morning — you don't add these yourself."],
+    ["●", "The dots up top", "One dot per task. It fills in green as you complete tasks, so you can see your progress at a glance."],
+    ["✍️", "Add evidence", "Tap this on any task to show you did it — as text, a photo, or a voice note. Pick whichever's easiest for that task."],
+    ["🔔", "The bell", "Turns on notifications, so you get a nudge here even when you're not checking Telegram."],
+    ["✅", "Review timing", "Evidence isn't graded instantly — it's reviewed together each morning, and the task's status updates then."],
+  ];
+  const FEATURES_STAFF = [
+    ["👥", "This week's roster", "Everyone in your class/team, with their task completion for the past 7 days."],
+    ["⚠", "The warning icon", "Shows up next to someone's numbers if any of their evidence looked questionable and needs a manual look."],
+    ["🔥", "Streak", "How many days in a row that person has completed most of their tasks."],
+    ["📱", "Telegram still works", "Everyone can keep using the bot exactly as before — the website is an extra way in, not a replacement."],
+  ];
+
+  function renderWelcomeFeatures(role, user) {
+    const isStaff = ["teacher", "principal", "manager", "admin"].includes(role);
+    $("welcomeTitle").textContent = isStaff ? "Welcome to Stride" : "Welcome to Stride";
+    const items = isStaff ? FEATURES_STAFF : FEATURES_STUDENT;
+    $("welcomeFeatures").innerHTML = items.map(([icon, title, desc]) => `
+      <div class="feature-item">
+        <div class="feature-icon">${icon}</div>
+        <div class="feature-text"><b>${title}</b><span>${desc}</span></div>
+      </div>`).join("");
+    if (user) $("welcomeStatus").textContent = statusText(user);
+  }
+
+  window.showWelcome = function () {
+    $("modal-welcome").classList.remove("hidden");
+  };
+  window.closeWelcome = function () {
+    $("modal-welcome").classList.add("hidden");
+    localStorage.setItem("stride_welcome_seen", "1");
+  };
+
+  function maybeAutoShowWelcome(role, user) {
+    renderWelcomeFeatures(role, user);
+    if (!localStorage.getItem("stride_welcome_seen")) {
+      showWelcome();
+    }
+  }
+
+  // ---------- Command box (free-text, same commands as Telegram) ----------
+  // Hits a new /command endpoint on web-api, which should run the SAME text-parsing
+  // logic already in edge-function/index.ts (add task / delete task / /status / /help /
+  // /paid etc.) so behavior matches Telegram exactly. Expects { reply: "..." } back.
+  window.sendCommand = async function () {
+    const input = $("commandInput");
+    const text = input.value.trim();
+    if (!text) return;
+    const log = $("commandLog");
+    log.insertAdjacentHTML("beforeend", `<div class="cmd-you">${text}</div>`);
+    input.value = "";
+    log.scrollTop = log.scrollHeight;
+
+    try {
+      const result = await apiCall("/command", { method: "POST", body: JSON.stringify({ text }) });
+      log.insertAdjacentHTML("beforeend", `<div class="cmd-reply">${result.reply || result.error || "…"}</div>`);
+    } catch (err) {
+      log.insertAdjacentHTML("beforeend", `<div class="cmd-reply">Couldn't send that — try again.</div>`);
+    }
+    log.scrollTop = log.scrollHeight;
+
+    // Some commands change your data (add task, /status, etc.) — refresh the view.
+    const today = await apiCall("/today");
+    renderTasks(today.tasks || []);
+  };
+
+  // ---------- Roster ----------
 
   function renderRoster(people) {
     const el = $("rosterList");
@@ -262,11 +612,16 @@
       const roster = await apiCall("/roster");
       renderRoster(roster.people || []);
       showOnly("view-roster");
+      renderStatusLine(me.user);
+      maybeAutoShowWelcome(me.user.account_role, me.user);
     } else {
       $("greeting").textContent = `Hi, ${me.user.name || "there"}`;
       const today = await apiCall("/today");
       renderTasks(today.tasks || []);
       showOnly("view-dashboard");
+      renderStatusLine(me.user);
+      await refreshBellState();
+      maybeAutoShowWelcome(me.user.account_role, me.user);
     }
   }
 

@@ -158,7 +158,22 @@
   .icon-btn{ background:none; border:none; color:var(--paper-dim); font-size:13px; width:auto; padding:4px 0; cursor:pointer; }
   .bell-btn{ background:none; border:none; color:var(--paper-dim); font-size:18px; width:auto; padding:4px; cursor:pointer; line-height:1; }
   .bell-btn.on{ color:var(--moss); }
-  #loading{ display:flex; align-items:center; justify-content:center; flex:1; color:var(--paper-dim); }
+  #loading{ display:flex; flex-direction:column; flex:1; color:var(--paper-dim); }
+
+  /* ---------- Loading skeleton (shown instead of a bare "Loading…" string) ---------- */
+  @keyframes shimmer{ 0%{ background-position:-400px 0; } 100%{ background-position:400px 0; } }
+  .skel{
+    background:linear-gradient(90deg, var(--ink-3) 25%, var(--ink-2) 37%, var(--ink-3) 63%);
+    background-size:400px 100%; animation:shimmer 1.4s ease-in-out infinite; border-radius:7px;
+  }
+  .skel-row{ height:14px; margin-bottom:12px; }
+  .skel-row:last-child{ margin-bottom:0; }
+  #loadingMessage{ text-align:center; padding:36px 0; }
+  #loadingMessage.hidden, #loadingSkeleton.hidden{ display:none; }
+  @media (min-width:900px){
+    #loadingSkeleton{ display:grid; grid-template-columns:1.3fr 0.9fr; gap:20px; align-items:start; }
+    #loadingSkeleton.hidden{ display:none; }
+  }
 
   .modal-overlay{
     position:fixed; inset:0; background:rgba(18,20,15,0.85); display:flex;
@@ -191,7 +206,31 @@
 
 <div class="wrap">
   <div id="loading">
-    <span class="muted" id="loadingText">Loading…</span>
+    <div id="loadingSkeleton">
+      <div class="dash-main">
+        <div class="skel skel-row" style="width:35%;height:20px;margin-bottom:18px"></div>
+        <div class="card">
+          <div class="skel skel-row" style="width:75%"></div>
+          <div class="skel skel-row" style="width:55%"></div>
+          <div class="skel skel-row" style="width:65%"></div>
+        </div>
+        <div class="card">
+          <div class="skel skel-row" style="width:90%"></div>
+          <div class="skel skel-row" style="height:38px;width:100%;margin-top:6px"></div>
+        </div>
+      </div>
+      <div class="dash-side">
+        <div class="card">
+          <div class="skel skel-row" style="width:40%;height:30px"></div>
+        </div>
+        <div class="card">
+          <div class="skel skel-row" style="width:100%;height:120px"></div>
+        </div>
+      </div>
+    </div>
+    <div id="loadingMessage" class="hidden">
+      <span class="muted" id="loadingText"></span>
+    </div>
   </div>
 
   <!-- ===== SIGNED OUT ===== -->
@@ -247,7 +286,7 @@
         <div id="commandLog"></div>
         <div class="row">
           <input type="text" id="commandInput" placeholder="Type a message…" onkeydown="if(event.key==='Enter')sendCommand()" style="margin-bottom:0;flex:1" />
-          <button class="btn-ghost btn-small" style="width:auto;flex:0 0 auto" onclick="$('quickPhotoInput').click()" title="Send a photo">📷</button>
+          <button class="btn-ghost btn-small" style="width:auto;flex:0 0 auto" onclick="document.getElementById('quickPhotoInput').click()" title="Send a photo">📷</button>
         </div>
         <input type="file" accept="image/*" capture="environment" id="quickPhotoInput" style="display:none" onchange="sendQuickPhoto()" />
         <button class="btn-ghost btn-small" onclick="sendCommand()">Send</button>
@@ -756,7 +795,13 @@
       </div>`).join("");
   }
 
+  function resetLoadingView() {
+    $("loadingSkeleton").classList.remove("hidden");
+    $("loadingMessage").classList.add("hidden");
+  }
+
   async function boot() {
+    resetLoadingView();
     showOnly("loading");
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { showOnly("view-signedout"); return; }
@@ -828,6 +873,10 @@
   function renderCalendar(entries) {
     const byDate = Object.fromEntries(entries.map(e => [e.date, e]));
     const todayStr = new Date().toISOString().slice(0, 10);
+
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - 34);
+
     const days = [];
     for (let i = 34; i >= 0; i--) {
       const d = new Date(); d.setDate(d.getDate() - i);
@@ -836,6 +885,15 @@
     const dow = ["S","M","T","W","T","F","S"];
     const grid = $("calGrid");
     grid.innerHTML = dow.map(d => `<div class="cal-dow">${d}</div>`).join("");
+
+    // Pad the front of the grid so the first day lands under its real weekday
+    // column, instead of always being forced into Sunday's slot regardless of
+    // what day it actually falls on.
+    const leadingBlanks = startDate.getDay();
+    for (let b = 0; b < leadingBlanks; b++) {
+      grid.appendChild(document.createElement("div"));
+    }
+
     days.forEach((dateStr, idx) => {
       const entry = byDate[dateStr];
       const cls = entry?.done ? "done" : entry?.partial ? "partial" : "";
@@ -856,7 +914,9 @@
 
   function showBootError(err) {
     console.error(err);
-    const el = $("loadingText");
+    const skel = $("loadingSkeleton"); const msg = $("loadingMessage"); const el = $("loadingText");
+    if (skel) skel.classList.add("hidden");
+    if (msg) msg.classList.remove("hidden");
     if (el) {
       el.innerHTML = "Something went wrong loading Stride.<br><br>" +
         '<button class="btn-ghost btn-small" style="width:auto;padding:8px 16px" onclick="location.reload()">Try again</button>';
@@ -876,7 +936,11 @@
   setTimeout(function () {
     var loading = document.getElementById("loading");
     if (loading && !loading.classList.contains("view-hidden")) {
+      var skel = document.getElementById("loadingSkeleton");
+      var msg = document.getElementById("loadingMessage");
       var el = document.getElementById("loadingText");
+      if (skel) skel.classList.add("hidden");
+      if (msg) msg.classList.remove("hidden");
       if (el) {
         el.innerHTML = "This is taking longer than expected.<br><br>" +
           '<button class="btn-ghost btn-small" style="width:auto;padding:8px 16px" onclick="location.reload()">Try again</button>';

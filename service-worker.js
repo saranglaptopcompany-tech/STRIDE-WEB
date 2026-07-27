@@ -1,47 +1,1429 @@
-// Makes the site installable, and now also handles incoming push notifications
-// (the website equivalent of the bot's morning/evening Telegram message).
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Stride AI</title>
+<meta name="theme-color" content="#12140F" />
+<link rel="manifest" href="manifest.json" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#12140F; --ink-2:#1B1E17; --ink-3:#242820;
+    --paper:#EDEAE0; --paper-dim:#B9B6A9;
+    --moss:#9FB88A; --moss-dim:#75886A;
+    --amber:#E0A458;
+    --red:#D97757;
+    --line: rgba(237,234,224,0.12);
+    --shadow: 0 1px 2px rgba(0,0,0,0.3);
+  }
+  /* Light theme: a soft sage-green identity, not just inverted dark-mode values —
+     three genuinely distinct surface levels (page / card / sunken) instead of three
+     near-identical pale tones, and a border you can actually see without being harsh. */
+  html[data-theme="light"]{
+    --ink:#EEF2E8; --ink-2:#FFFFFF; --ink-3:#E1E8D8;
+    --paper:#1E2A18; --paper-dim:#5B6B52;
+    --moss:#4C7A3D; --moss-dim:#3A5E2E;
+    --amber:#A56A28;
+    --red:#B14E30;
+    --line: rgba(30,42,24,0.16);
+    --shadow: 0 2px 6px rgba(30,42,24,0.08);
+  }
+  html{ color-scheme: dark; }
+  html[data-theme="light"]{ color-scheme: light; }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--ink); color:var(--paper);
+    font-family:'Inter',system-ui,sans-serif; -webkit-font-smoothing:antialiased;
+    min-height:100vh; display:flex; flex-direction:column;
+    transition: background-color 0.35s ease, color 0.35s ease;
+  }
+  h1,h2,h3{ font-family:'Fraunces',serif; font-weight:600; margin:0; }
+  .wrap{ max-width:520px; margin:0 auto; width:100%; padding:24px; flex:1; display:flex; flex-direction:column; }
+  .brand{ display:flex; align-items:center; justify-content:space-between; padding:20px 24px; }
+  .brand-left{ display:flex; align-items:center; gap:10px; }
+  .brand .mark{ width:10px; height:10px; border-radius:50%; background:var(--moss); box-shadow:0 0 0 4px rgba(159,184,138,0.15); }
+  .brand span{ font-family:'Fraunces',serif; font-size:19px; letter-spacing:0.02em; }
+  .theme-toggle{
+    width:auto; background:var(--ink-2); border:1px solid var(--line); color:var(--paper-dim);
+    border-radius:20px; padding:6px 12px; font-size:12px; cursor:pointer; display:flex; align-items:center; gap:6px;
+  }
+  .theme-toggle:hover{ border-color:var(--moss-dim); color:var(--paper); }
 
-self.addEventListener("install", (event) => {
-  self.skipWaiting();
-});
+  /* ---------- Desktop layout: single column becomes a two-column dashboard ---------- */
+  #loading, #view-signedout, #view-needscode, #view-dashboard, #view-roster, #view-locked{ display:none; }
+  #loading:not(.view-hidden){ display:flex; }
+  #view-signedout:not(.view-hidden), #view-needscode:not(.view-hidden), #view-roster:not(.view-hidden), #view-locked:not(.view-hidden){ display:block; }
+  #view-dashboard:not(.view-hidden){ display:block; }
 
-self.addEventListener("activate", (event) => {
-  self.clients.claim();
-});
-
-// Fired when a push arrives from the server (see clients.py -> send_push, called from
-// send_morning_missions.py / send_evening_prompt.py). The payload is whatever JSON
-// object was passed as `data` when the push was sent.
-self.addEventListener("push", (event) => {
-  let payload = {};
-  try {
-    payload = event.data ? event.data.json() : {};
-  } catch {
-    payload = { title: "Stride", body: event.data ? event.data.text() : "" };
+  @media (min-width: 900px){
+    .wrap{ max-width:1040px; }
+    #view-dashboard{ display:grid !important; grid-template-columns: 1.3fr 0.9fr; gap:20px; align-items:start; }
+    #view-dashboard.view-hidden{ display:none !important; } /* wins: ID+class beats ID alone */
+    #view-dashboard .top-actions, #view-dashboard #statusLine{ grid-column: 1 / -1; }
+    .dash-main{ display:flex; flex-direction:column; }
+    .dash-side{ display:flex; flex-direction:column; }
   }
 
-  const title = payload.title || "Stride";
-  const options = {
-    body: payload.body || "",
-    tag: payload.tag || "stride-notification",
-    data: { url: payload.url || "/" },
+  /* ---------- Motion ---------- */
+  @keyframes riseIn{ from{ opacity:0; transform:translateY(8px); } to{ opacity:1; transform:translateY(0); } }
+  @keyframes popIn{ from{ opacity:0; transform:scale(0.6); } to{ opacity:1; transform:scale(1); } }
+  .task, .roster-row{ animation: riseIn 0.4s ease both; }
+  .cal-cell{ animation: popIn 0.3s ease both; }
+  @media (prefers-reduced-motion: reduce){
+    *{ animation-duration: 0.001s !important; transition-duration: 0.001s !important; }
+  }
+
+  /* ---------- Score badge ---------- */
+  .score-card{
+    background:var(--ink-2); border:1px solid var(--line); border-radius:14px; padding:20px 22px;
+    margin-bottom:14px; display:flex; align-items:center; justify-content:space-between;
+  }
+  .score-num{ font-family:'Fraunces',serif; font-size:34px; font-weight:700; color:var(--moss); line-height:1; }
+  .score-label{ font-size:12px; color:var(--paper-dim); margin-top:4px; letter-spacing:0.02em; }
+  .streak-chip{ font-size:13px; background:rgba(224,164,88,0.14); color:var(--amber); padding:6px 12px; border-radius:20px; white-space:nowrap; }
+
+  /* ---------- Streak calendar ---------- */
+  .cal-card{ background:var(--ink-2); border:1px solid var(--line); border-radius:14px; padding:20px 22px; margin-bottom:14px; }
+  .cal-nav{ display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+  .cal-nav-btn{
+    width:auto; background:var(--ink-3); border:1px solid var(--line); color:var(--paper);
+    border-radius:8px; padding:4px 12px; font-size:16px; line-height:1.4; cursor:pointer;
+  }
+  .cal-nav-btn:hover{ border-color:var(--moss-dim); color:var(--moss); }
+  .summary-btns{ display:flex; flex-wrap:wrap; gap:6px; margin-top:14px; }
+  .summary-btn{
+    width:auto; flex:0 0 auto; background:var(--ink-3); border:1px solid var(--line); color:var(--paper-dim);
+    border-radius:8px; padding:5px 10px; font-size:12px; font-weight:600; cursor:pointer;
+  }
+  .summary-btn:hover{ border-color:var(--moss-dim); color:var(--moss); background:rgba(159,184,138,0.12); }
+  .summary-stat{ display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--line); font-size:14px; }
+  .summary-stat:last-child{ border-bottom:none; }
+  .summary-stat b{ color:var(--moss); }
+  .cal-title{ font-size:13px; color:var(--paper-dim); margin-bottom:12px; }
+  .cal-grid{ display:grid; grid-template-columns: repeat(7, 1fr); gap:6px; }
+  .cal-dow{ font-size:10px; color:var(--paper-dim); text-align:center; padding-bottom:2px; font-weight:600; }
+  .cal-cell{
+    aspect-ratio:1; min-height:26px; border-radius:7px; display:flex; align-items:center; justify-content:center;
+    font-size:12px; font-weight:600; color:var(--paper); background:var(--ink-3); border:1px solid var(--line);
+  }
+  .cal-cell.done{ background:var(--moss); color:#101410; border-color:var(--moss); }
+  .cal-cell.partial{ background:var(--amber); color:#191510; border-color:var(--amber); }
+  .cal-cell.today{ box-shadow:0 0 0 2px var(--moss); }
+  .cal-legend{ display:flex; gap:14px; margin-top:12px; font-size:11px; color:var(--paper-dim); }
+  .cal-legend span{ display:inline-flex; align-items:center; gap:5px; }
+  .cal-dot{ width:9px; height:9px; border-radius:3px; display:inline-block; }
+  .card{ background:var(--ink-2); border:1px solid var(--line); border-radius:14px; padding:22px; margin-bottom:14px; }
+  p.lead{ color:var(--paper-dim); font-size:15px; line-height:1.5; margin:6px 0 20px; }
+  input[type=text]{
+    width:100%; background:var(--ink); border:1px solid var(--line); color:var(--paper);
+    padding:13px 14px; border-radius:9px; font-size:15px; font-family:inherit; margin-bottom:10px;
+  }
+  input:focus, button:focus-visible{ outline:2px solid var(--moss); outline-offset:2px; }
+  textarea{
+    width:100%; background:var(--ink); border:1px solid var(--line); color:var(--paper);
+    padding:12px 14px; border-radius:9px; font-size:14px; font-family:inherit; min-height:72px; resize:vertical;
+  }
+  button{
+    font-family:inherit; font-size:15px; font-weight:600; border-radius:9px; border:none;
+    padding:13px 18px; cursor:pointer; width:100%;
+  }
+  button:disabled{ opacity:0.5; cursor:default; }
+  .btn-primary{ background:var(--moss); color:#101410; }
+  .btn-primary:hover{ background:#B0CC9C; }
+  .btn-ghost{ background:transparent; color:var(--paper); border:1px solid var(--line); }
+  .btn-ghost:hover{ border-color:var(--moss-dim); }
+  .btn-small{ width:auto; padding:8px 14px; font-size:13px; }
+  .row{ display:flex; gap:10px; }
+  .row > button{ flex:1; }
+  .muted{ color:var(--paper-dim); font-size:13px; }
+  .error{ color:var(--amber); font-size:13px; margin:6px 0 0; }
+  .tabs{ display:flex; gap:8px; margin-bottom:16px; }
+  .tab{ flex:1; text-align:center; padding:9px; border-radius:8px; font-size:13px; cursor:pointer; color:var(--paper-dim); border:1px solid var(--line); }
+  .tab.active{ color:var(--ink); background:var(--moss); border-color:var(--moss); font-weight:600; }
+  /* the "stride" progress trail — dots joined by a dashed path, one per task */
+  .trail{ display:flex; align-items:center; gap:4px; margin:4px 0 18px; }
+  .trail .step{ flex:1; height:3px; border-radius:2px; background:var(--line); }
+  .trail .step.done{ background:var(--moss); }
+  .task{ border-bottom:1px solid var(--line); padding:16px 0; }
+  .task:last-child{ border-bottom:none; }
+  .task-title{ font-size:15px; font-weight:500; margin-bottom:8px; }
+  .task-status{ display:inline-block; font-size:11px; padding:2px 8px; border-radius:20px; margin-left:8px; vertical-align:middle; }
+  .status-pending{ background:var(--ink-3); color:var(--paper-dim); }
+  .status-completed{ background:rgba(159,184,138,0.2); color:var(--moss); }
+  .status-partial, .status-not_completed{ background:rgba(224,164,88,0.18); color:var(--amber); }
+  .evidence-box{ margin-top:8px; }
+  .evidence-box.hidden{ display:none; }
+  .evidence-tabs{ display:flex; gap:6px; margin-bottom:8px; }
+  .evidence-tab{ flex:1; text-align:center; padding:7px; border-radius:7px; font-size:12px; cursor:pointer; color:var(--paper-dim); border:1px solid var(--line); }
+  .evidence-tab.active{ color:var(--ink); background:var(--moss-dim); border-color:var(--moss-dim); font-weight:600; }
+  .evidence-pane{ display:none; }
+  .evidence-pane.active{ display:block; }
+  .file-preview{ font-size:12px; color:var(--moss); margin:6px 0; display:none; }
+  .rec-indicator{ font-size:13px; color:var(--red); margin:6px 0; display:none; align-items:center; gap:6px; }
+  .rec-dot{ width:8px; height:8px; border-radius:50%; background:var(--red); animation:pulse 1s infinite; }
+  @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:0.3;} }
+  .saved-tag{ font-size:12px; color:var(--moss); margin-top:6px; }
+  .hidden{ display:none; }
+  .roster-row{ display:flex; justify-content:space-between; align-items:center; padding:12px 0; border-bottom:1px solid var(--line); font-size:14px; }
+  .roster-row:last-child{ border-bottom:none; }
+  .flag{ color:var(--amber); font-size:12px; }
+  .top-actions{ display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
+  .top-actions-left{ display:flex; align-items:center; gap:10px; }
+  .icon-btn{ background:none; border:none; color:var(--paper-dim); font-size:13px; width:auto; padding:4px 0; cursor:pointer; }
+  .bell-btn{ background:none; border:none; color:var(--paper-dim); font-size:18px; width:auto; padding:4px; cursor:pointer; line-height:1; }
+  .bell-btn.on{ color:var(--moss); }
+  #loading{ flex-direction:column; flex:1; color:var(--paper-dim); } /* display is handled solely by #loading:not(.view-hidden) above — don't set it here or it re-creates the specificity tie */
+
+  /* ---------- Loading skeleton (shown instead of a bare "Loading…" string) ---------- */
+  @keyframes shimmer{ 0%{ background-position:-400px 0; } 100%{ background-position:400px 0; } }
+  .skel{
+    background:linear-gradient(90deg, var(--ink-3) 25%, var(--ink-2) 37%, var(--ink-3) 63%);
+    background-size:400px 100%; animation:shimmer 1.4s ease-in-out infinite; border-radius:7px;
+  }
+  .skel-row{ height:14px; margin-bottom:12px; }
+  .skel-row:last-child{ margin-bottom:0; }
+  #loadingMessage{ text-align:center; padding:36px 0; }
+  #loadingMessage.hidden, #loadingSkeleton.hidden{ display:none; }
+  @media (min-width:900px){
+    #loadingSkeleton{ display:grid; grid-template-columns:1.3fr 0.9fr; gap:20px; align-items:start; }
+    #loadingSkeleton.hidden{ display:none; }
+  }
+
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(18,20,15,0.85); display:flex;
+    align-items:center; justify-content:center; padding:20px; z-index:100;
+  }
+  .modal-overlay.hidden{ display:none; }
+  .modal-card{
+    background:var(--ink-2); border:1px solid var(--line); border-radius:16px;
+    padding:26px; max-width:440px; width:100%; max-height:85vh; overflow-y:auto;
+  }
+  .modal-card h2{ margin-bottom:4px; }
+  .feature-item{ display:flex; gap:12px; margin:18px 0; align-items:flex-start; }
+  .feature-icon{ font-size:20px; line-height:1.3; flex-shrink:0; width:26px; text-align:center; }
+  .feature-text b{ display:block; font-size:14px; margin-bottom:2px; }
+  .feature-text span{ font-size:13px; color:var(--paper-dim); line-height:1.45; }
+  .help-btn{ background:none; border:1px solid var(--line); color:var(--paper-dim); font-size:13px; width:26px; height:26px; border-radius:50%; padding:0; cursor:pointer; line-height:1; }
+  #commandLog{ max-height:220px; overflow-y:auto; margin-bottom:10px; }
+  #commandLog:empty{ display:none; }
+  .cmd-you, .cmd-reply{ font-size:13px; line-height:1.4; margin:6px 0; padding:8px 10px; border-radius:8px; white-space:pre-wrap; }
+  .cmd-you{ background:var(--ink-3); color:var(--paper); }
+  .cmd-reply{ background:rgba(159,184,138,0.12); color:var(--paper); }
+</style>
+</head>
+<body>
+
+<div class="brand">
+  <div class="brand-left"><div class="mark"></div><span>Stride</span></div>
+  <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()">🌙 <span id="themeLabel">Dark</span></button>
+</div>
+
+<div class="wrap">
+  <div id="loading">
+    <div id="loadingSkeleton">
+      <div class="dash-main">
+        <div class="skel skel-row" style="width:35%;height:20px;margin-bottom:18px"></div>
+        <div class="card">
+          <div class="skel skel-row" style="width:75%"></div>
+          <div class="skel skel-row" style="width:55%"></div>
+          <div class="skel skel-row" style="width:65%"></div>
+        </div>
+        <div class="card">
+          <div class="skel skel-row" style="width:90%"></div>
+          <div class="skel skel-row" style="height:38px;width:100%;margin-top:6px"></div>
+        </div>
+      </div>
+      <div class="dash-side">
+        <div class="card">
+          <div class="skel skel-row" style="width:40%;height:30px"></div>
+        </div>
+        <div class="card">
+          <div class="skel skel-row" style="width:100%;height:120px"></div>
+        </div>
+      </div>
+    </div>
+    <div id="loadingMessage" class="hidden">
+      <span class="muted" id="loadingText"></span>
+    </div>
+  </div>
+
+  <!-- ===== SIGNED OUT ===== -->
+  <div id="friendRequestToast" class="hidden" style="position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:50;background:var(--card,#1b1b1f);border:1px solid var(--border,#333);border-radius:10px;padding:12px 16px;box-shadow:0 6px 20px rgba(0,0,0,.3);max-width:320px;text-align:center"></div>
+
+  <div id="view-signedout" class="card">
+    <h2>Sign in</h2>
+    <p class="lead">Sign in with the same Google account you'll use every day. If you already use the Telegram bot, this will let you link that same account to the website — nothing gets duplicated.</p>
+    <button class="btn-primary" onclick="signIn()">Continue with Google</button>
+  </div>
+
+  <!-- ===== LOCKED (plan expired — payment reminder + deletion countdown, nothing else) ===== -->
+  <div id="view-locked" class="card" style="text-align:center">
+    <h2 style="color:#e5484d">⚠️ Your plan has expired</h2>
+    <img src="/payments_qr.jpeg" alt="Payment QR code" style="max-width:280px;width:100%;margin:16px auto;border-radius:8px;display:block" />
+    <p class="lead">Scan the QR above to renew, then message the Telegram bot with <code>/paid</code> and a note about your payment.</p>
+    <p class="lead" style="color:#e5484d;font-weight:600">
+      Account and all data will be permanently deleted in <span id="lockedDaysLeft">—</span> if not renewed.
+    </p>
+    <button class="btn-ghost btn-small" onclick="signOut()">Sign out</button>
+  </div>
+
+  <!-- ===== NEEDS CODE (new signup OR linking existing telegram account) ===== -->
+  <div id="view-needscode" class="card">
+    <div class="tabs">
+      <div class="tab active" id="tab-join" onclick="switchCodeTab('join')">I'm new here</div>
+      <div class="tab" id="tab-link" onclick="switchCodeTab('link')">I already use Telegram</div>
+    </div>
+
+    <div id="pane-join">
+      <h2>Enter your access code</h2>
+      <p class="lead">Whoever gave you this app also gave you a code like <b>ACC-8X2K1M</b>. Type it below.</p>
+      <input type="text" id="joinCodeInput" placeholder="ACC-8X2K1M" autocapitalize="characters" />
+      <button class="btn-primary" onclick="submitJoin()">Join</button>
+      <p class="error" id="joinError"></p>
+    </div>
+
+    <div id="pane-link" style="display:none">
+      <h2>Connect your Telegram account</h2>
+      <p class="lead">Open Telegram, message the bot <b>/linkweb</b>, and it'll reply with a short code. Type that here.</p>
+      <input type="text" id="linkCodeInput" placeholder="8X2K1M" autocapitalize="characters" />
+      <button class="btn-primary" onclick="submitLink()">Link account</button>
+      <p class="error" id="linkError"></p>
+    </div>
+  </div>
+
+  <!-- ===== DASHBOARD (student / employee / individual) ===== -->
+  <div id="view-dashboard">
+    <div class="top-actions">
+      <div class="top-actions-left">
+        <h2 id="greeting">Today</h2>
+        <button class="bell-btn" id="pushBell" onclick="togglePush()" title="Notifications">🔔</button>
+        <button class="help-btn" onclick="showWelcome()" title="How Stride works">?</button>
+      </div>
+      <button class="icon-btn" onclick="signOut()">Sign out</button>
+    </div>
+    <p class="muted" id="statusLine" style="margin:-8px 0 14px"></p>
+    <div id="upgradeCodeRow" style="margin:-8px 0 14px">
+      <a href="#" id="upgradeCodeToggle" onclick="toggleUpgradeCode(); return false;" style="font-size:12px;color:var(--paper-dim)">Have a new code? Enter it here</a>
+      <div id="upgradeCodeForm" class="row" style="display:none;margin-top:8px">
+        <input type="text" id="upgradeCodeInput" placeholder="ACC-XXXXXX" style="margin-bottom:0" onkeydown="if(event.key==='Enter')submitUpgradeCode()" />
+        <button class="btn-ghost btn-small" style="flex:0 0 auto;width:auto" onclick="submitUpgradeCode()">Apply</button>
+      </div>
+      <p class="muted" id="upgradeCodeError" style="font-size:12px;color:var(--red);margin:4px 0 0"></p>
+    </div>
+
+    <div class="dash-main">
+      <div class="trail" id="trail"></div>
+
+      <!-- ===== Goals (ongoing, not tied to a day) ===== -->
+      <div class="card" id="goalsCard">
+        <h3 style="font-size:15px;margin-bottom:10px">Goals</h3>
+        <div class="row" style="margin-bottom:8px">
+          <input type="text" id="addGoalInput" placeholder="e.g. Get ACCA certified" style="margin-bottom:0" onkeydown="if(event.key==='Enter')addGoal()" />
+          <button class="btn-ghost btn-small" style="flex:0 0 auto;width:auto" onclick="document.getElementById('goalFileInput').click()" title="Attach a document, PDF, or pasted notes">📎</button>
+          <button class="btn-ghost btn-small" id="goalVoiceBtn" style="flex:0 0 auto;width:auto" onclick="toggleGoalVoice()" title="Record a voice note">🎙️</button>
+          <button class="btn-ghost btn-small" id="goalAddBtn" style="flex:0 0 auto;width:auto" onclick="addGoal()">Add</button>
+        </div>
+        <input type="file" accept=".pdf,.doc,.docx,.txt" id="goalFileInput" style="display:none" onchange="handleGoalFile()" />
+        <div class="file-preview" id="goalAttachPreview"></div>
+        <p class="muted" id="goalTip" style="font-size:12px;margin:0 0 10px">💡 Tip: mention where you're starting from too — e.g. "Get ACCA certified, currently mid-way through F3" — for a more tailored plan.</p>
+        <p class="error" id="goalError" style="font-size:12px;margin:0 0 10px;display:none"></p>
+        <div id="goalsList"></div>
+      </div>
+
+      <div class="card">
+        <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:10px">
+          <button class="btn-ghost btn-small" style="width:auto;padding:6px 10px" onclick="shiftTaskDay(-1)" aria-label="Previous day">‹</button>
+          <span style="font-size:13px;color:var(--paper-dim)">
+            <span id="taskDateLabel">Today</span>
+            <a href="#" id="taskTodayLink" onclick="goToToday(); return false;" style="display:none;margin-left:8px;font-size:12px">Back to today</a>
+          </span>
+          <button class="btn-ghost btn-small" style="width:auto;padding:6px 10px" onclick="shiftTaskDay(1)" aria-label="Next day">›</button>
+        </div>
+        <div id="taskList"></div>
+      </div>
+
+      <!-- ===== COMMAND BOX (same free-text commands as the Telegram bot) ===== -->
+      <div class="card">
+        <div id="commandLog"></div>
+        <div class="row">
+          <input type="text" id="commandInput" placeholder="Type a message…" onkeydown="if(event.key==='Enter')sendCommand()" style="margin-bottom:0;flex:1" />
+          <button class="btn-ghost btn-small" style="width:auto;flex:0 0 auto" onclick="document.getElementById('quickPhotoInput').click()" title="Send a photo">📷</button>
+        </div>
+        <input type="file" accept="image/*" capture="environment" id="quickPhotoInput" style="display:none" onchange="sendQuickPhoto()" />
+        <button class="btn-ghost btn-small" onclick="sendCommand()">Send</button>
+      </div>
+    </div>
+
+    <div class="dash-side">
+      <!-- ===== Stride Score ===== -->
+      <div class="score-card">
+        <div>
+          <div class="score-num" id="scoreNum">0</div>
+          <div class="score-label">STRIDE SCORE</div>
+        </div>
+        <div class="streak-chip" id="streakChip">🔥 0 day streak</div>
+      </div>
+
+      <!-- ===== Calendar (month view) ===== -->
+      <div class="cal-card">
+        <div class="cal-nav">
+          <button class="cal-nav-btn" onclick="shiftMonth(-1)" aria-label="Previous month">‹</button>
+          <div class="cal-title" id="calTitle">–</div>
+          <button class="cal-nav-btn" onclick="shiftMonth(1)" aria-label="Next month">›</button>
+        </div>
+        <div class="cal-grid" id="calGrid"></div>
+        <div class="cal-legend">
+          <span><i class="cal-dot" style="background:var(--moss)"></i> Completed</span>
+          <span><i class="cal-dot" style="background:var(--amber)"></i> Partial</span>
+          <span><i class="cal-dot" style="background:var(--ink-3)"></i> No data</span>
+        </div>
+        <div class="summary-btns">
+          <button class="summary-btn" onclick="showSummary('3d')">3d</button>
+          <button class="summary-btn" onclick="showSummary('7d')">7d</button>
+          <button class="summary-btn" onclick="showSummary('15d')">15d</button>
+          <button class="summary-btn" onclick="showSummary('30d')">30d</button>
+          <button class="summary-btn" onclick="showSummary('3m')">3mo</button>
+          <button class="summary-btn" onclick="showSummary('6m')">6mo</button>
+          <button class="summary-btn" onclick="showSummary('1y')">1yr</button>
+        </div>
+      </div>
+
+      <!-- ===== Friends ===== -->
+      <div class="card" id="friendsCard">
+        <div class="top-actions" style="margin-bottom:10px">
+          <div class="top-actions-left"><h3 style="font-size:15px">Friends</h3></div>
+        </div>
+
+        <p class="muted" style="margin:0 0 6px">Your code — share it so others can add you</p>
+        <div class="row" style="margin-bottom:14px">
+          <input type="text" id="myFriendCode" readonly placeholder="…" style="margin-bottom:0;text-align:center;letter-spacing:0.12em;font-weight:600" />
+          <button class="btn-ghost btn-small" style="flex:0 0 auto;width:auto" onclick="copyFriendCode()">Copy</button>
+        </div>
+
+        <p class="muted" style="margin:0 0 6px">Add a friend by code or email</p>
+        <div class="row" style="margin-bottom:6px">
+          <input type="text" id="addFriendInput" placeholder="Code (ABC123) or email" style="margin-bottom:0" onkeydown="if(event.key==='Enter')addFriend()" />
+          <button class="btn-ghost btn-small" style="flex:0 0 auto;width:auto" onclick="addFriend()">Add</button>
+        </div>
+        <p class="error" id="addFriendError"></p>
+
+        <div id="friendRequests"></div>
+        <div id="friendsList"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== ROSTER (teacher / principal / manager / admin) ===== -->
+  <div id="view-roster">
+    <div class="top-actions">
+      <div class="top-actions-left">
+        <h2>This week's roster</h2>
+        <button class="help-btn" onclick="showWelcome()" title="How Stride works">?</button>
+      </div>
+      <button class="icon-btn" onclick="signOut()">Sign out</button>
+    </div>
+    <p class="muted" id="statusLineRoster" style="margin:-8px 0 14px"></p>
+    <div class="card" id="rosterList"></div>
+  </div>
+
+  <!-- ===== SUMMARY MODAL ===== -->
+  <div id="modal-summary" class="modal-overlay hidden">
+    <div class="modal-card">
+      <h2 id="summaryTitle">Summary</h2>
+      <div id="summaryBody"></div>
+      <button class="btn-primary" onclick="closeSummary()" style="margin-top:14px">Close</button>
+    </div>
+  </div>
+
+  <!-- ===== WELCOME / HELP MODAL ===== -->
+  <div id="modal-welcome" class="modal-overlay hidden">
+    <div class="modal-card">
+      <h2 id="welcomeTitle">Welcome to Stride</h2>
+      <p class="lead" style="margin-bottom:4px">Here's what everything does.</p>
+      <div id="welcomeFeatures"></div>
+      <p class="muted" id="welcomeStatus" style="margin:14px 0 4px"></p>
+      <button class="btn-primary" onclick="closeWelcome()">Got it</button>
+    </div>
+  </div>
+
+  <!-- ===== DAILY MOTIVATION MODAL (first open of the day only) ===== -->
+  <div id="modal-motivation" class="modal-overlay hidden">
+    <div class="modal-card">
+      <h2>✨ Today's push</h2>
+      <p class="lead" id="motivationBody" style="white-space:pre-wrap"></p>
+      <button class="btn-primary" onclick="closeMotivation()">Let's go</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  // ======================================================================
+  // CONFIG — fill these in before deploying. Find them in Supabase:
+  //   Project Settings → API → Project URL            -> SUPABASE_URL
+  //   Project Settings → API → anon / public key       -> SUPABASE_ANON_KEY
+  //   Edge Functions → web-api → its Function URL       -> WEB_API_URL
+  // VAPID_PUBLIC_KEY is the public half of the push notification keypair — safe to
+  // expose in frontend code (that's the whole point of it being "public"). Generate
+  // it once, it never needs to change. The matching private key goes ONLY in your
+  // GitHub Secrets / Python scripts, never here.
+  // ======================================================================
+  const SUPABASE_URL = "https://ynsmiydpeithbadsdlkc.supabase.co";
+  const SUPABASE_ANON_KEY = "sb_publishable_r7HqmYn6gJMtOdW5B3qRPQ_qlIrhDi9";
+  const WEB_API_URL = "https://ynsmiydpeithbadsdlkc.supabase.co/functions/v1/dynamic-api";
+  const VAPID_PUBLIC_KEY = "BArSQdhMr3a_FvBaLbHENdq64j8oRJkEWqycmSzDVclZwKlGeg8LbDVoGW4b5uJecRJgUYAvfXnB7H_y1JR65ZI";
+
+  import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  const $ = (id) => document.getElementById(id);
+  // Apply any locally-remembered theme immediately, before auth/network resolve —
+  // corrected against the server value (theme_preference) once /me comes back in boot().
+  {
+    const cached = localStorage.getItem("stride_theme");
+    if (cached) document.documentElement.setAttribute("data-theme", cached);
+  }
+  const show = (id) => { $(id).classList.remove("view-hidden"); };
+  const hide = (id) => { $(id).classList.add("view-hidden"); };
+  const ALL_VIEWS = ["loading","view-signedout","view-needscode","view-dashboard","view-roster","view-locked"];
+
+  function renderLockedScreen(lockedAt) {
+    const LOCK_TO_DELETE_DAYS = 30;
+    const deleteAt = new Date(lockedAt).getTime() + LOCK_TO_DELETE_DAYS * 24 * 60 * 60 * 1000;
+    const daysLeft = Math.max(0, Math.ceil((deleteAt - Date.now()) / (24 * 60 * 60 * 1000)));
+    $("lockedDaysLeft").textContent = `${daysLeft} day${daysLeft === 1 ? "" : "s"}`;
+  }
+  function showOnly(id){ ALL_VIEWS.forEach(v => v===id ? show(v) : hide(v)); }
+
+  async function apiCall(path, options = {}) {
+    const { data: { session } } = await supabase.auth.getSession();
+    const headers = { "Content-Type": "application/json", ...(options.headers||{}) };
+    if (session) headers.Authorization = `Bearer ${session.access_token}`;
+    const res = await fetch(`${WEB_API_URL}${path}`, { ...options, headers });
+    return res.json();
+  }
+
+  window.signIn = async function () {
+    await supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo: window.location.href } });
+  };
+  window.signOut = async function () {
+    await supabase.auth.signOut();
+    showOnly("view-signedout");
   };
 
-  event.waitUntil(self.registration.showNotification(title, options));
-});
+  window.switchCodeTab = function (which) {
+    $("tab-join").classList.toggle("active", which === "join");
+    $("tab-link").classList.toggle("active", which === "link");
+    $("pane-join").style.display = which === "join" ? "" : "none";
+    $("pane-link").style.display = which === "link" ? "" : "none";
+  };
 
-// Fired when the user taps the notification — bring them to the app (or a specific
-// task if the payload included a URL), focusing an existing tab if one's already open.
-self.addEventListener("notificationclick", (event) => {
-  event.notification.close();
-  const url = event.notification.data?.url || "/";
+  window.submitJoin = async function () {
+    const code = $("joinCodeInput").value.trim();
+    if (!code) return;
+    const result = await apiCall("/join", { method: "POST", body: JSON.stringify({ code }) });
+    if (result.error) { $("joinError").textContent = result.error; return; }
+    await boot();
+  };
 
-  event.waitUntil(
-    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientsList) => {
-      for (const client of clientsList) {
-        if ("focus" in client) return client.focus();
+  window.toggleUpgradeCode = function () {
+    const form = $("upgradeCodeForm");
+    form.style.display = form.style.display === "none" ? "" : "none";
+  };
+
+  window.submitUpgradeCode = async function () {
+    const code = $("upgradeCodeInput").value.trim();
+    if (!code) return;
+    $("upgradeCodeError").textContent = "";
+    const result = await apiCall("/redeem-code", { method: "POST", body: JSON.stringify({ code }) });
+    if (result.error) { $("upgradeCodeError").textContent = result.error; return; }
+    $("upgradeCodeInput").value = "";
+    $("upgradeCodeForm").style.display = "none";
+    await boot(); // re-pull /me so the status line, plan, etc. all reflect the new code
+  };
+
+  window.submitLink = async function () {
+    const linkCode = $("linkCodeInput").value.trim();
+    if (!linkCode) return;
+    const result = await apiCall("/link", { method: "POST", body: JSON.stringify({ linkCode }) });
+    if (result.error) { $("linkError").textContent = result.error; return; }
+    await boot();
+  };
+
+  // ---------- Evidence: text / photo / voice ----------
+
+  function renderTasks(tasks) {
+    const listEl = $("taskList");
+    const trailEl = $("trail");
+    trailEl.innerHTML = "";
+    listEl.innerHTML = "";
+
+    if (tasks.length === 0) {
+      const label = viewedTaskIsToday ? "today" : formatTaskDateLabel(viewedTaskDate, false).toLowerCase();
+      listEl.innerHTML = `<p class="muted">No tasks for ${label}.</p>`;
+      return;
+    }
+
+    tasks.forEach(t => {
+      const step = document.createElement("div");
+      step.className = "step" + (t.status === "completed" ? " done" : "");
+      trailEl.appendChild(step);
+
+      const row = document.createElement("div");
+      row.className = "task";
+      row.style.animationDelay = `${listEl.children.length * 45}ms`;
+      row.innerHTML = `
+        <div class="task-title">${t.title}<span class="task-status status-${t.status}">${t.status.replace("_"," ")}</span></div>
+        <div class="evidence-box hidden" id="ev-${t.id}">
+          <div class="evidence-tabs">
+            <div class="evidence-tab active" id="etab-text-${t.id}" onclick="switchEvidenceTab(${t.id},'text')">Text</div>
+            <div class="evidence-tab" id="etab-photo-${t.id}" onclick="switchEvidenceTab(${t.id},'photo')">Photo</div>
+            <div class="evidence-tab" id="etab-voice-${t.id}" onclick="switchEvidenceTab(${t.id},'voice')">Voice</div>
+          </div>
+
+          <div class="evidence-pane active" id="epane-text-${t.id}">
+            <textarea id="ev-text-${t.id}" placeholder="What did you do? Type it here..."></textarea>
+            <button class="btn-ghost btn-small" onclick="submitTextEvidence(${t.id})">Submit</button>
+          </div>
+
+          <div class="evidence-pane" id="epane-photo-${t.id}">
+            <input type="file" accept="image/*" capture="environment" id="ev-photo-${t.id}" onchange="onPhotoChosen(${t.id})" />
+            <div class="file-preview" id="ev-photo-preview-${t.id}"></div>
+            <button class="btn-ghost btn-small" id="ev-photo-submit-${t.id}" disabled onclick="submitFileEvidence(${t.id},'photo')">Submit photo</button>
+          </div>
+
+          <div class="evidence-pane" id="epane-voice-${t.id}">
+            <div class="row">
+              <button class="btn-ghost btn-small" id="ev-rec-start-${t.id}" onclick="startRecording(${t.id})">● Record</button>
+              <button class="btn-ghost btn-small hidden" id="ev-rec-stop-${t.id}" onclick="stopRecording(${t.id})">■ Stop</button>
+            </div>
+            <div class="rec-indicator" id="ev-rec-indicator-${t.id}"><span class="rec-dot"></span> Recording…</div>
+            <div class="file-preview" id="ev-voice-preview-${t.id}"></div>
+            <button class="btn-ghost btn-small" id="ev-voice-submit-${t.id}" disabled onclick="submitFileEvidence(${t.id},'voice')">Submit voice note</button>
+          </div>
+
+          <div class="saved-tag hidden" id="ev-saved-${t.id}">Saved — reviewed each morning.</div>
+        </div>
+        <button class="btn-ghost btn-small" onclick="toggleEvidence(${t.id})">Add evidence</button>
+      `;
+      listEl.appendChild(row);
+    });
+  }
+
+  window.toggleEvidence = function (taskId) {
+    $(`ev-${taskId}`).classList.toggle("hidden");
+  };
+
+  window.switchEvidenceTab = function (taskId, which) {
+    ["text","photo","voice"].forEach(kind => {
+      $(`etab-${kind}-${taskId}`).classList.toggle("active", kind === which);
+      $(`epane-${kind}-${taskId}`).classList.toggle("active", kind === which);
+    });
+  };
+
+  window.submitTextEvidence = async function (taskId) {
+    const textContent = $(`ev-text-${taskId}`).value.trim();
+    if (!textContent) return;
+    const result = await apiCall("/evidence", {
+      method: "POST",
+      body: JSON.stringify({ taskId, evidenceType: "text", textContent }),
+    });
+    if (result.saved) markSaved(taskId, () => { $(`ev-text-${taskId}`).value = ""; });
+  };
+
+  function markSaved(taskId, cleanup) {
+    $(`ev-saved-${taskId}`).classList.remove("hidden");
+    if (cleanup) cleanup();
+  }
+
+  // A file (from <input type=file> or a recorded Blob) -> base64 string with no
+  // "data:...;base64," prefix, since the server expects raw base64.
+  function fileToBase64(fileOrBlob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result.split(",")[1]);
+      reader.onerror = reject;
+      reader.readAsDataURL(fileOrBlob);
+    });
+  }
+
+  const pendingFiles = {}; // taskId -> { photo: File, voice: Blob+mimeType }
+
+  window.onPhotoChosen = function (taskId) {
+    const input = $(`ev-photo-${taskId}`);
+    const file = input.files?.[0];
+    if (!file) return;
+    if (!pendingFiles[taskId]) pendingFiles[taskId] = {};
+    pendingFiles[taskId].photo = file;
+    $(`ev-photo-preview-${taskId}`).textContent = `Selected: ${file.name}`;
+    $(`ev-photo-preview-${taskId}`).style.display = "block";
+    $(`ev-photo-submit-${taskId}`).disabled = false;
+  };
+
+  const activeRecorders = {}; // taskId -> MediaRecorder
+
+  window.startRecording = async function (taskId) {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/mp4";
+      const recorder = new MediaRecorder(stream, { mimeType });
+      const chunks = [];
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+      recorder.onstop = () => {
+        const blob = new Blob(chunks, { type: mimeType });
+        if (!pendingFiles[taskId]) pendingFiles[taskId] = {};
+        pendingFiles[taskId].voice = { blob, mimeType };
+        $(`ev-voice-preview-${taskId}`).textContent = `Recorded ${Math.round(blob.size/1024)}KB`;
+        $(`ev-voice-preview-${taskId}`).style.display = "block";
+        $(`ev-voice-submit-${taskId}`).disabled = false;
+        stream.getTracks().forEach(tr => tr.stop());
+      };
+      recorder.start();
+      activeRecorders[taskId] = recorder;
+      $(`ev-rec-start-${taskId}`).classList.add("hidden");
+      $(`ev-rec-stop-${taskId}`).classList.remove("hidden");
+      $(`ev-rec-indicator-${taskId}`).style.display = "flex";
+    } catch (err) {
+      alert("Couldn't access the microphone. Check your browser permissions.");
+    }
+  };
+
+  window.stopRecording = function (taskId) {
+    const recorder = activeRecorders[taskId];
+    if (recorder && recorder.state !== "inactive") recorder.stop();
+    $(`ev-rec-start-${taskId}`).classList.remove("hidden");
+    $(`ev-rec-stop-${taskId}`).classList.add("hidden");
+    $(`ev-rec-indicator-${taskId}`).style.display = "none";
+  };
+
+  window.submitFileEvidence = async function (taskId, kind) {
+    const pending = pendingFiles[taskId] || {};
+    const submitBtn = $(`ev-${kind}-submit-${taskId}`);
+    let fileOrBlob, mimeType;
+    if (kind === "photo") {
+      fileOrBlob = pending.photo;
+      mimeType = pending.photo?.type;
+    } else {
+      fileOrBlob = pending.voice?.blob;
+      mimeType = pending.voice?.mimeType;
+    }
+    if (!fileOrBlob) return;
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Uploading…";
+    try {
+      const fileData = await fileToBase64(fileOrBlob);
+      const result = await apiCall("/evidence", {
+        method: "POST",
+        body: JSON.stringify({ taskId, evidenceType: kind, fileData, mimeType }),
+      });
+      if (result.saved) {
+        markSaved(taskId);
+        submitBtn.textContent = kind === "photo" ? "Submit photo" : "Submit voice note";
+      } else {
+        alert(result.error || "Upload failed.");
+        submitBtn.disabled = false;
+        submitBtn.textContent = kind === "photo" ? "Submit photo" : "Submit voice note";
       }
-      if (self.clients.openWindow) return self.clients.openWindow(url);
-    })
-  );
-});
+    } catch (err) {
+      alert("Upload failed. Try again.");
+      submitBtn.disabled = false;
+      submitBtn.textContent = kind === "photo" ? "Submit photo" : "Submit voice note";
+    }
+  };
+
+  // ---------- Push notifications ----------
+
+  function urlBase64ToUint8Array(base64String) {
+    const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+    const rawData = atob(base64);
+    return Uint8Array.from([...rawData].map(c => c.charCodeAt(0)));
+  }
+
+  async function getExistingPushSubscription() {
+    if (!("serviceWorker" in navigator)) return null;
+    const reg = await navigator.serviceWorker.ready;
+    return reg.pushManager.getSubscription();
+  }
+
+  async function refreshBellState() {
+    if (!("PushManager" in window)) { $("pushBell").style.display = "none"; return; }
+    const sub = await getExistingPushSubscription();
+    $("pushBell").classList.toggle("on", !!sub);
+  }
+
+  window.togglePush = async function () {
+    const existing = await getExistingPushSubscription();
+    if (existing) {
+      await apiCall("/push-unsubscribe", { method: "POST", body: JSON.stringify({ endpoint: existing.endpoint }) });
+      await existing.unsubscribe();
+      await refreshBellState();
+      return;
+    }
+
+    if (Notification.permission === "denied") {
+      alert("Notifications are blocked for this site in your browser settings. Enable them there, then try again.");
+      return;
+    }
+
+    const permission = await Notification.requestPermission();
+    if (permission !== "granted") return;
+
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+    });
+    await apiCall("/push-subscribe", { method: "POST", body: JSON.stringify({ subscription: sub }) });
+    await refreshBellState();
+  };
+
+  // ---------- Status: trial / plan / organization ----------
+  // Mirrors the same logic as the Telegram bot's /status command, so both
+  // surfaces always say the same thing. Expects me.user to include plan,
+  // trial_ends_at, paid_until (already there if /me does select("*") on users).
+  // organization_label is optional — only shows if your /me endpoint adds it
+  // (a join on organizations/groups, same as orgLabel() in the bot).
+  const PLAN_LABELS = { individual_paid: "Personal plan", school_paid: "Student/School plan", enterprise_paid: "Employer plan" };
+
+  // trial_ends_at is stored as a plain date (no time-of-day), so we treat the trial as
+  // running through the end of that day — gives a real "Xd Yh left" countdown instead of
+  // a day count that silently rounds down as the day goes on.
+  function formatTimeLeft(trialEndsAt) {
+    const endOfDay = new Date(`${trialEndsAt}T23:59:59`);
+    const diffMs = endOfDay.getTime() - Date.now();
+    if (diffMs <= 0) return null;
+    const totalMinutes = Math.floor(diffMs / 60000);
+    const days = Math.floor(totalMinutes / 1440);
+    const hours = Math.floor((totalMinutes % 1440) / 60);
+    const minutes = totalMinutes % 60;
+    if (days >= 1) return `${days}d ${hours}h left`;
+    if (hours >= 1) return `${hours}h ${minutes}m left`;
+    return `${minutes}m left`;
+  }
+
+  function statusText(user) {
+    const today = new Date().toISOString().slice(0, 10);
+    let line;
+    if (user.plan && user.plan !== "free") {
+      line = `✅ ${PLAN_LABELS[user.plan] || user.plan}` + (user.paid_until ? ` — active until ${user.paid_until}` : "");
+    } else if (user.trial_ends_at && user.trial_ends_at >= today) {
+      const timeLeft = formatTimeLeft(user.trial_ends_at) || "trial ending";
+      line = `🕒 Free trial — ${timeLeft}`;
+    } else {
+      line = "⚠️ Trial ended — not on a paid plan yet";
+    }
+    if (user.organization_label) line += ` · 🏢 ${user.organization_label}`;
+    return line;
+  }
+
+  function renderStatusLine(user) {
+    const text = statusText(user);
+    if ($("statusLine")) $("statusLine").textContent = text;
+    if ($("statusLineRoster")) $("statusLineRoster").textContent = text;
+  }
+
+  // ---------- Welcome / help modal ----------
+
+  const FEATURES_STUDENT = [
+    ["📋", "Today", "Your tasks for today. New ones are picked for you automatically each morning — you don't add these yourself."],
+    ["●", "The dots up top", "One dot per task. It fills in green as you complete tasks, so you can see your progress at a glance."],
+    ["✍️", "Add evidence", "Tap this on any task to show you did it — as text, a photo, or a voice note. Pick whichever's easiest for that task."],
+    ["🎯", "Goals", "Ongoing goals rather than one-day tasks — type one in, or record a voice note about it, and you'll get an AI-built plan and a motivation line for it."],
+    ["💬", "Type a message", "Anything you type or say here can add a task or a goal, or just ask a question — no need to use exact wording."],
+    ["🧑‍🤝‍🧑", "Friends", "Add friends by code or email to see each other's streaks and stay accountable together."],
+    ["🔔", "The bell", "Turns on notifications, so you get a nudge here even when you're not checking Telegram."],
+    ["✅", "Review timing", "Evidence isn't graded instantly — it's reviewed together each morning, and the task's status updates then."],
+  ];
+  const FEATURES_STAFF = [
+    ["👥", "This week's roster", "Everyone in your class/team, with their task completion for the past 7 days."],
+    ["⚠", "The warning icon", "Shows up next to someone's numbers if any of their evidence looked questionable and needs a manual look."],
+    ["🔥", "Streak", "How many days in a row that person has completed most of their tasks."],
+    ["📱", "Telegram still works", "Everyone can keep using the bot exactly as before — the website is an extra way in, not a replacement."],
+  ];
+
+  function renderWelcomeFeatures(role, user) {
+    const isStaff = ["teacher", "principal", "manager", "admin"].includes(role);
+    $("welcomeTitle").textContent = isStaff ? "Welcome to Stride" : "Welcome to Stride";
+    const items = isStaff ? FEATURES_STAFF : FEATURES_STUDENT;
+    $("welcomeFeatures").innerHTML = items.map(([icon, title, desc]) => `
+      <div class="feature-item">
+        <div class="feature-icon">${icon}</div>
+        <div class="feature-text"><b>${title}</b><span>${desc}</span></div>
+      </div>`).join("");
+    if (user) $("welcomeStatus").textContent = statusText(user);
+  }
+
+  window.showMotivation = function (text) {
+    if (!text) return;
+    $("motivationBody").textContent = text;
+    $("modal-motivation").classList.remove("hidden");
+  };
+  window.closeMotivation = function () {
+    $("modal-motivation").classList.add("hidden");
+  };
+
+  window.showWelcome = function () {
+    $("modal-welcome").classList.remove("hidden");
+  };
+  window.closeWelcome = function () {
+    $("modal-welcome").classList.add("hidden");
+    localStorage.setItem("stride_welcome_seen", "1");
+  };
+
+  function maybeAutoShowWelcome(role, user) {
+    renderWelcomeFeatures(role, user);
+    if (!localStorage.getItem("stride_welcome_seen")) {
+      showWelcome();
+    }
+  }
+
+  // ---------- Command box (free-text, same commands as Telegram) ----------
+  // Hits a new /command endpoint on web-api, which should run the SAME text-parsing
+  // logic already in edge-function/index.ts (add task / delete task / /status / /help /
+  // /paid etc.) so behavior matches Telegram exactly. Expects { reply: "..." } back.
+  let latestTasks = [];
+  let viewedTaskDate = null;   // YYYY-MM-DD currently shown in the task card
+  let viewedTaskIsToday = true;
+
+  function formatTaskDateLabel(dateStr, isToday) {
+    if (isToday) return "Today";
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const d = new Date(dateStr + "T00:00:00");
+    const t = new Date(todayStr + "T00:00:00");
+    const diffDays = Math.round((d - t) / 86400000);
+    if (diffDays === 1) return "Tomorrow";
+    if (diffDays === -1) return "Yesterday";
+    return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+  }
+
+  // Loads a specific day's tasks via GET /today?date=..., used by the ‹ › day arrows,
+  // clicking a day in the month calendar, and "Back to today". The backend clamps out-of
+  // -range dates back to today itself and tells us via isToday/viewedDate, so we always
+  // trust what comes back rather than the date we asked for.
+  async function loadTasksForDate(dateStr) {
+    const q = dateStr ? `?date=${dateStr}` : "";
+    const data = await apiCall(`/today${q}`);
+    if (data.error) return;
+    latestTasks = data.tasks || [];
+    viewedTaskDate = data.viewedDate;
+    viewedTaskIsToday = !!data.isToday;
+    renderTasks(latestTasks);
+    renderScore(data.streak || { current: 0, longest: 0, score: 0 });
+    $("taskDateLabel").textContent = formatTaskDateLabel(viewedTaskDate, viewedTaskIsToday);
+    $("taskTodayLink").style.display = viewedTaskIsToday ? "none" : "inline";
+  }
+
+  window.shiftTaskDay = function (delta) {
+    const base = viewedTaskDate || new Date().toISOString().slice(0, 10);
+    const d = new Date(base + "T00:00:00");
+    d.setDate(d.getDate() + delta);
+    loadTasksForDate(d.toISOString().slice(0, 10)).catch(() => {});
+  };
+
+  window.goToToday = function () {
+    loadTasksForDate(new Date().toISOString().slice(0, 10)).catch(() => {});
+  };
+
+  // Clicking a day in the month calendar jumps the task card straight to that date.
+  window.viewCalendarDate = function (dateStr) {
+    loadTasksForDate(dateStr).catch(() => {});
+  };
+
+  window.sendCommand = async function () {
+    const input = $("commandInput");
+    const text = input.value.trim();
+    if (!text) return;
+    const log = $("commandLog");
+    log.insertAdjacentHTML("beforeend", `<div class="cmd-you">${text}</div>`);
+    input.value = "";
+    log.scrollTop = log.scrollHeight;
+
+    try {
+      const result = await apiCall("/command", { method: "POST", body: JSON.stringify({ text }) });
+      log.insertAdjacentHTML("beforeend", `<div class="cmd-reply">${result.reply || result.error || "…"}</div>`);
+    } catch (err) {
+      log.insertAdjacentHTML("beforeend", `<div class="cmd-reply">Couldn't send that — try again.</div>`);
+    }
+    log.scrollTop = log.scrollHeight;
+
+    // Some commands change your data (add task, /status, etc.) — refresh whichever
+    // date is currently on screen rather than always snapping back to today.
+    loadTasksForDate(viewedTaskDate).catch(() => {});
+  };
+
+  // ---------- Quick photo (camera button next to the command box) ----------
+  // For "I just want to snap proof right now" without opening a specific task first.
+  // Attaches it to the first pending task today, same as tapping "Add evidence" ->
+  // Photo on that task would — reuses the existing /evidence endpoint rather than
+  // inventing a second upload path.
+  window.sendQuickPhoto = async function () {
+    const input = $("quickPhotoInput");
+    const file = input.files && input.files[0];
+    if (!file) return;
+
+    const target = latestTasks.find(t => t.status === "pending");
+    const log = $("commandLog");
+    if (!target) {
+      log.insertAdjacentHTML("beforeend", `<div class="cmd-reply">No pending task to attach that photo to today.</div>`);
+      log.scrollTop = log.scrollHeight;
+      input.value = "";
+      return;
+    }
+
+    log.insertAdjacentHTML("beforeend", `<div class="cmd-you">📷 Photo for "${target.title}"</div>`);
+    log.scrollTop = log.scrollHeight;
+
+    try {
+      const fileData = await fileToBase64(file);
+      const result = await apiCall("/evidence", {
+        method: "POST",
+        body: JSON.stringify({ taskId: target.id, evidenceType: "photo", fileData, mimeType: file.type }),
+      });
+      log.insertAdjacentHTML("beforeend",
+        `<div class="cmd-reply">${result.saved ? "Saved — reviewed each morning." : (result.error || "Upload failed.")}</div>`);
+    } catch (err) {
+      log.insertAdjacentHTML("beforeend", `<div class="cmd-reply">Upload failed — try again.</div>`);
+    }
+    log.scrollTop = log.scrollHeight;
+    input.value = "";
+
+    loadTasksForDate(viewedTaskDate).catch(() => {});
+  };
+
+  // ---------- Roster ----------
+
+  function rosterBadge(p) {
+    const today = new Date().toISOString().slice(0, 10);
+    if (p.plan && p.plan !== "free") return `<span class="muted">✅ ${p.paid_until ? `until ${p.paid_until}` : "active"}</span>`;
+    if (p.trial_ends_at && p.trial_ends_at >= today) {
+      const timeLeft = formatTimeLeft(p.trial_ends_at) || "trial ending";
+      return `<span class="muted">🕒 ${timeLeft}</span>`;
+    }
+    if (p.trial_ends_at) return `<span class="flag">⚠ trial ended</span>`;
+    return "";
+  }
+
+  function renderRoster(people) {
+    const el = $("rosterList");
+    if (people.length === 0) { el.innerHTML = '<p class="muted">No one\'s on your roster yet.</p>'; return; }
+    el.innerHTML = people.map((p, i) => `
+      <div class="roster-row" style="animation-delay:${i * 45}ms">
+        <span>${p.name || "Unnamed"} ${p.current_streak > 0 ? `<span class="muted">🔥${p.current_streak}</span>` : ""}</span>
+        <span style="text-align:right">
+          <div>${p.week_tasks_done}/${p.week_tasks_total} this week
+            ${p.week_flagged_count > 0 ? `<span class="flag"> ⚠ ${p.week_flagged_count}</span>` : ""}
+          </div>
+          <div style="font-size:11px;margin-top:2px">${rosterBadge(p)}</div>
+        </span>
+      </div>`).join("");
+  }
+
+  function resetLoadingView() {
+    $("loadingSkeleton").classList.remove("hidden");
+    $("loadingMessage").classList.add("hidden");
+  }
+
+  async function boot() {
+    resetLoadingView();
+    showOnly("loading");
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) { showOnly("view-signedout"); return; }
+
+    const me = await apiCall("/me");
+    if (me.error) { showOnly("view-needscode"); return; }
+
+    applyTheme(me.user.theme_preference === "light" ? "light" : "dark", false);
+
+    if (me.user.is_locked && me.user.locked_at) {
+      renderLockedScreen(me.user.locked_at);
+      showOnly("view-locked");
+      return;
+    }
+
+    const rosterRoles = ["teacher", "principal", "manager", "admin"];
+    if (rosterRoles.includes(me.user.account_role)) {
+      const roster = await apiCall("/roster");
+      renderRoster(roster.people || []);
+      showOnly("view-roster");
+      renderStatusLine(me.user);
+      maybeAutoShowWelcome(me.user.account_role, me.user);
+    } else {
+      $("greeting").textContent = `Hi, ${me.user.name || "there"}`;
+      await loadTasksForDate().catch((err) => console.error("Today load failed:", err));
+      loadCalendarMonth().catch((err) => console.error("Calendar load failed:", err));
+      showOnly("view-dashboard");
+      renderStatusLine(me.user);
+      await refreshBellState();
+      maybeAutoShowWelcome(me.user.account_role, me.user);
+      showMotivation(me.motivationSpeech);
+      loadFriends().catch((err) => console.error("Friends load failed:", err));
+      loadGoals().catch((err) => console.error("Goals load failed:", err));
+    }
+  }
+
+  // ---------- Theme ----------
+  // Applied the instant we know the user's saved preference (before their first paint
+  // of the dashboard) so there's no flash of the wrong theme. `persist` only hits the
+  // network when the person actually clicks the toggle, not on every boot().
+  function applyTheme(theme, persist) {
+    document.documentElement.setAttribute("data-theme", theme);
+    $("themeLabel").textContent = theme === "light" ? "Light" : "Dark";
+    $("themeToggle").firstChild.textContent = theme === "light" ? "☀️ " : "🌙 ";
+    localStorage.setItem("stride_theme", theme);
+    if (persist) apiCall("/theme", { method: "PATCH", body: JSON.stringify({ theme }) }).catch(() => {});
+  }
+
+  window.toggleTheme = function () {
+    const current = document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
+    applyTheme(current === "light" ? "dark" : "light", true);
+  };
+
+  // ---------- Stride Score ----------
+  // Animated count-up rather than just printing the number — small motion moment that
+  // makes checking your score feel like a small reward, not just reading a stat.
+  function renderScore(streak) {
+    $("streakChip").textContent = `🔥 ${streak.current} day${streak.current === 1 ? "" : "s"} streak`;
+    const el = $("scoreNum");
+    const target = streak.score || 0;
+    const duration = 700;
+    const start = performance.now();
+    function tick(now) {
+      const p = Math.min(1, (now - start) / duration);
+      el.textContent = Math.round(target * (1 - Math.pow(1 - p, 3))); // ease-out cubic
+      if (p < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+
+  // ---------- Month calendar ----------
+  // Real month view: ‹ › moves between months, backed by GET /calendar?month=YYYY-MM.
+  // viewedYear/viewedMonth (1-indexed) track what's currently on screen so shiftMonth
+  // can compute the next request without re-deriving it from the DOM.
+  let viewedYear = null, viewedMonth = null; // set on first load, 1-indexed month
+
+  async function loadCalendarMonth(year, month) {
+    const q = year && month ? `?month=${year}-${String(month).padStart(2, "0")}` : "";
+    const data = await apiCall(`/calendar${q}`);
+    if (data.error) return;
+    viewedYear = data.year;
+    viewedMonth = data.month;
+    renderCalendarMonth(data);
+  }
+
+  window.shiftMonth = function (delta) {
+    if (viewedYear === null) return;
+    let y = viewedYear, m = viewedMonth + delta;
+    if (m < 1) { m = 12; y -= 1; }
+    if (m > 12) { m = 1; y += 1; }
+    loadCalendarMonth(y, m);
+  };
+
+  function renderCalendarMonth(data) {
+    const byDate = Object.fromEntries(data.days.map(d => [d.date, d]));
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const dow = ["S", "M", "T", "W", "T", "F", "S"];
+    const grid = $("calGrid");
+    grid.innerHTML = dow.map(d => `<div class="cal-dow">${d}</div>`).join("");
+
+    for (let b = 0; b < data.firstWeekday; b++) grid.appendChild(document.createElement("div"));
+
+    for (let day = 1; day <= data.daysInMonth; day++) {
+      const dateStr = `${data.year}-${String(data.month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+      const entry = byDate[dateStr];
+      const cls = entry?.done ? "done" : entry?.partial ? "partial" : "";
+      const isToday = dateStr === todayStr;
+      const cell = document.createElement("div");
+      cell.className = `cal-cell ${cls}${isToday ? " today" : ""}`.trim();
+      cell.textContent = day;
+      cell.title = `View tasks for ${dateStr}`;
+      cell.style.cursor = "pointer";
+      cell.onclick = () => viewCalendarDate(dateStr);
+      grid.appendChild(cell);
+    }
+    $("calTitle").textContent = data.monthLabel;
+  }
+
+  // ---------- Period summaries ----------
+  const SUMMARY_LABELS = {
+    "3d": "Last 3 days", "7d": "Last 7 days", "15d": "Last 15 days", "30d": "Last 30 days",
+    "3m": "Last 3 months", "6m": "Last 6 months", "1y": "Last year",
+  };
+
+  window.showSummary = async function (range) {
+    $("summaryTitle").textContent = SUMMARY_LABELS[range] || "Summary";
+    $("summaryBody").innerHTML = "<p class=\"muted\">Loading…</p>";
+    $("modal-summary").classList.remove("hidden");
+    const data = await apiCall(`/summary?range=${range}`);
+    if (data.error) { $("summaryBody").innerHTML = `<p class="error">${data.error}</p>`; return; }
+    $("summaryBody").innerHTML = `
+      <div class="summary-stat"><span>Average completion</span><b>${data.avgCompletion}%</b></div>
+      <div class="summary-stat"><span>Perfect days</span><b>${data.perfectDays} / ${data.daysLogged}</b></div>
+      <div class="summary-stat"><span>Flagged for review</span><b>${data.flaggedTotal}</b></div>
+    `;
+  };
+
+  window.closeSummary = function () {
+    $("modal-summary").classList.add("hidden");
+  };
+
+
+  // ---------- Goals ----------
+  function goalRowHtml(g) {
+    return `
+      <div class="roster-row" style="flex-direction:column;align-items:stretch" data-goal-id="${g.id}">
+        <div class="row" style="justify-content:space-between">
+          <span style="${g.status === 'done' ? 'text-decoration:line-through;color:var(--paper-dim)' : ''}">${g.title}</span>
+          <span class="row" style="gap:6px;flex:0 0 auto">
+            <button class="btn-ghost btn-small" style="width:auto;padding:6px 12px" onclick="toggleGoal(${g.id}, ${g.status !== 'done'})">${g.status === 'done' ? 'Reopen' : 'Done'}</button>
+            <button class="btn-ghost btn-small" style="width:auto;padding:6px 12px" onclick="deleteGoal(${g.id})">Remove</button>
+          </span>
+        </div>
+        ${g.motivation_line ? `<p class="muted" style="margin:6px 0 0;font-style:italic">💬 ${g.motivation_line}</p>` : ""}
+        ${Array.isArray(g.ai_plan) && g.ai_plan.length ? `<ul style="margin:6px 0 0;padding-left:18px;font-size:13px;color:var(--paper-dim)">${g.ai_plan.map(s => `<li>${s}</li>`).join("")}</ul>` : ""}
+      </div>`;
+  }
+
+  function renderGoals(goals) {
+    const el = $("goalsList");
+    if (!goals.length) { el.innerHTML = `<p class="muted">No goals yet — add something ongoing you're working toward.</p>`; return; }
+    el.innerHTML = goals.map(goalRowHtml).join("");
+  }
+
+  async function loadGoals() {
+    const result = await apiCall("/goals");
+    if (!result.error) renderGoals(result.goals || []);
+  }
+
+  // Goal attachments: a document/PDF (sent as base64, same pattern as evidence uploads)
+  // or a single voice note recorded inline — one attachment at a time.
+  let pendingGoalFile = null;   // { fileData, mimeType }
+  let pendingGoalVoice = null;  // { blob, mimeType }
+  let goalRecorder = null;
+
+  window.handleGoalFile = async function () {
+    const input = $("goalFileInput");
+    const file = input.files && input.files[0];
+    if (!file) return;
+    pendingGoalVoice = null;
+    const fileData = await fileToBase64(file);
+    pendingGoalFile = { fileData, mimeType: file.type || "application/octet-stream" };
+    $("goalAttachPreview").textContent = `📎 ${file.name}`;
+    $("goalAttachPreview").style.display = "block";
+  };
+
+  window.toggleGoalVoice = async function () {
+    const btn = $("goalVoiceBtn");
+    if (goalRecorder && goalRecorder.state === "recording") {
+      goalRecorder.stop();
+      btn.textContent = "🎙️";
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/mp4";
+      goalRecorder = new MediaRecorder(stream, { mimeType });
+      const chunks = [];
+      goalRecorder.ondataavailable = (e) => chunks.push(e.data);
+      goalRecorder.onstop = () => {
+        pendingGoalFile = null;
+        const blob = new Blob(chunks, { type: mimeType });
+        pendingGoalVoice = { blob, mimeType };
+        $("goalAttachPreview").textContent = `🎙️ Voice note recorded (${Math.round(blob.size / 1024)}KB)`;
+        $("goalAttachPreview").style.display = "block";
+        stream.getTracks().forEach(t => t.stop());
+      };
+      goalRecorder.start();
+      btn.textContent = "⏹️";
+    } catch {
+      $("goalAttachPreview").textContent = "Couldn't access the microphone.";
+      $("goalAttachPreview").style.display = "block";
+    }
+  };
+
+  window.addGoal = async function () {
+    const title = $("addGoalInput").value.trim();
+    if (!title && !pendingGoalFile && !pendingGoalVoice) return;
+    const body = { title };
+    if (pendingGoalFile) {
+      body.fileData = pendingGoalFile.fileData;
+      body.mimeType = pendingGoalFile.mimeType;
+    } else if (pendingGoalVoice) {
+      body.fileData = await fileToBase64(pendingGoalVoice.blob);
+      body.mimeType = pendingGoalVoice.mimeType;
+    }
+
+    // Gemini's plan takes a few seconds — without this, clicking Add looked like it did
+    // nothing at all. Disable the button and swap the tip line for a visible "thinking" state.
+    const addBtn = $("goalAddBtn");
+    const tipEl = $("goalTip");
+    const errEl = $("goalError");
+    const originalTip = tipEl.textContent;
+    addBtn.disabled = true;
+    addBtn.textContent = "Thinking…";
+    tipEl.textContent = "💭 Working out a plan for this goal, one moment…";
+    errEl.style.display = "none";
+
+    let result;
+    try {
+      result = await apiCall("/goal", { method: "POST", body: JSON.stringify(body) });
+    } catch (err) {
+      result = { error: "Couldn't reach the server — try again." };
+    }
+
+    addBtn.disabled = false;
+    addBtn.textContent = "Add";
+    tipEl.textContent = originalTip;
+
+    if (result.error) {
+      errEl.textContent = result.error;
+      errEl.style.display = "block";
+      return;
+    }
+
+    $("addGoalInput").value = "";
+    pendingGoalFile = null;
+    pendingGoalVoice = null;
+    $("goalAttachPreview").style.display = "none";
+    $("goalFileInput").value = "";
+
+    // Show the freshly-added goal (with its Gemini plan, if one came back) right away
+    // instead of waiting on a second round-trip via loadGoals().
+    if (result.goal) {
+      const el = $("goalsList");
+      if (el.querySelector(".muted")) el.innerHTML = ""; // clear "no goals yet" placeholder
+      el.insertAdjacentHTML("afterbegin", goalRowHtml(result.goal));
+    }
+    loadGoals().catch(() => {});
+  };
+
+  window.toggleGoal = async function (goalId, done) {
+    await apiCall("/goal", { method: "PATCH", body: JSON.stringify({ goalId, done }) });
+    loadGoals().catch(() => {});
+  };
+
+  window.deleteGoal = async function (goalId) {
+    await apiCall("/goal-delete", { method: "POST", body: JSON.stringify({ goalId }) });
+    loadGoals().catch(() => {});
+  };
+
+  // ---------- Friends ----------
+  // Wrapped in its own try/catch and called after the main dashboard is already
+  // showing — a failure here (e.g. migration not run yet) should never block the
+  // rest of the dashboard from rendering.
+  function renderFriendRequests(requests) {
+    const el = $("friendRequests");
+    if (!requests.length) { el.innerHTML = ""; return; }
+    el.innerHTML = `<p class="muted" style="margin:14px 0 6px">Requests</p>` + requests.map(r => `
+      <div class="roster-row">
+        <span>${r.from_name}</span>
+        <span class="row" style="gap:6px">
+          <button class="btn-ghost btn-small" style="width:auto;padding:6px 12px" onclick="respondFriendRequest(${r.id},'accept')">Accept</button>
+          <button class="btn-ghost btn-small" style="width:auto;padding:6px 12px" onclick="respondFriendRequest(${r.id},'decline')">Decline</button>
+        </span>
+      </div>`).join("");
+
+    // Pop up a toast for any request we haven't already announced — so a new request
+    // is noticed right away instead of only being visible if you scroll to Friends.
+    let seen = [];
+    try { seen = JSON.parse(localStorage.getItem("seenFriendRequestIds") || "[]"); } catch {}
+    const fresh = requests.filter(r => !seen.includes(r.id));
+    if (fresh.length) {
+      const toast = $("friendRequestToast");
+      const text = fresh.length === 1
+        ? `${fresh[0].from_name} sent you a friend request`
+        : `${fresh.length} new friend requests`;
+      toast.textContent = `👋 ${text}`;
+      toast.classList.remove("hidden");
+      setTimeout(() => toast.classList.add("hidden"), 6000);
+      localStorage.setItem("seenFriendRequestIds", JSON.stringify(requests.map(r => r.id)));
+    }
+  }
+
+  function renderFriendsList(friends) {
+    const el = $("friendsList");
+    if (!friends.length) { el.innerHTML = `<p class="muted" style="margin:14px 0 0">No friends added yet.</p>`; return; }
+    el.innerHTML = `<p class="muted" style="margin:14px 0 6px">Friends</p>` + friends.map(f => `
+      <div class="roster-row">
+        <span>${f.name} ${f.current_streak > 0 ? `<span class="muted">🔥${f.current_streak}</span>` : ""}</span>
+        <span class="muted">${f.score} pts</span>
+      </div>`).join("");
+  }
+
+  async function loadFriends() {
+    const codeResult = await apiCall("/friend-code");
+    if (!codeResult.error) $("myFriendCode").value = codeResult.friend_code;
+
+    const [reqResult, friendsResult] = await Promise.all([
+      apiCall("/friend-requests"),
+      apiCall("/friends"),
+    ]);
+    if (!reqResult.error) renderFriendRequests(reqResult.requests || []);
+    if (!friendsResult.error) renderFriendsList(friendsResult.friends || []);
+  }
+
+  window.copyFriendCode = function () {
+    const val = $("myFriendCode").value;
+    if (!val) return;
+    navigator.clipboard.writeText(val).catch(() => {});
+  };
+
+  window.addFriend = async function () {
+    const raw = $("addFriendInput").value.trim();
+    $("addFriendError").textContent = "";
+    if (!raw) return;
+    const body = raw.includes("@") ? { email: raw } : { code: raw };
+    const result = await apiCall("/friend-request", { method: "POST", body: JSON.stringify(body) });
+    if (result.error) { $("addFriendError").textContent = result.error; return; }
+    $("addFriendInput").value = "";
+    loadFriends().catch(() => {});
+  };
+
+  window.respondFriendRequest = async function (requestId, action) {
+    await apiCall(`/friend-${action}`, { method: "POST", body: JSON.stringify({ requestId }) });
+    loadFriends().catch(() => {});
+  };
+
+  supabase.auth.onAuthStateChange((_event) => { boot().catch(showBootError); });
+  boot().catch(showBootError);
+
+  function showBootError(err) {
+    console.error(err);
+    const skel = $("loadingSkeleton"); const msg = $("loadingMessage"); const el = $("loadingText");
+    if (skel) skel.classList.add("hidden");
+    if (msg) msg.classList.remove("hidden");
+    if (el) {
+      el.innerHTML = "Something went wrong loading Stride.<br><br>" +
+        '<button class="btn-ghost btn-small" style="width:auto;padding:8px 16px" onclick="location.reload()">Try again</button>';
+    }
+  }
+
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("service-worker.js").catch(() => {});
+  }
+</script>
+
+<!-- Plain (non-module) script on purpose: if the module script above ever fails to
+     parse or run — an unsupported syntax feature on an older phone browser, a network
+     hiccup loading the module, anything — this still runs and turns the infinite
+     spinner into an actual message with a way forward, instead of a blank stuck screen. -->
+<script>
+  setTimeout(function () {
+    var loading = document.getElementById("loading");
+    if (loading && !loading.classList.contains("view-hidden")) {
+      var skel = document.getElementById("loadingSkeleton");
+      var msg = document.getElementById("loadingMessage");
+      var el = document.getElementById("loadingText");
+      if (skel) skel.classList.add("hidden");
+      if (msg) msg.classList.remove("hidden");
+      if (el) {
+        el.innerHTML = "This is taking longer than expected.<br><br>" +
+          '<button class="btn-ghost btn-small" style="width:auto;padding:8px 16px" onclick="location.reload()">Try again</button>';
+      }
+    }
+  }, 8000);
+</script>
+</body>
+</html>

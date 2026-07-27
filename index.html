@@ -52,9 +52,9 @@
   .theme-toggle:hover{ border-color:var(--moss-dim); color:var(--paper); }
 
   /* ---------- Desktop layout: single column becomes a two-column dashboard ---------- */
-  #loading, #view-signedout, #view-needscode, #view-dashboard, #view-roster{ display:none; }
+  #loading, #view-signedout, #view-needscode, #view-dashboard, #view-roster, #view-locked{ display:none; }
   #loading:not(.view-hidden){ display:flex; }
-  #view-signedout:not(.view-hidden), #view-needscode:not(.view-hidden), #view-roster:not(.view-hidden){ display:block; }
+  #view-signedout:not(.view-hidden), #view-needscode:not(.view-hidden), #view-roster:not(.view-hidden), #view-locked:not(.view-hidden){ display:block; }
   #view-dashboard:not(.view-hidden){ display:block; }
 
   @media (min-width: 900px){
@@ -250,42 +250,23 @@
   </div>
 
   <!-- ===== SIGNED OUT ===== -->
+  <div id="friendRequestToast" class="hidden" style="position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:50;background:var(--card,#1b1b1f);border:1px solid var(--border,#333);border-radius:10px;padding:12px 16px;box-shadow:0 6px 20px rgba(0,0,0,.3);max-width:320px;text-align:center"></div>
+
   <div id="view-signedout" class="card">
     <h2>Sign in</h2>
-    <div class="tabs">
-      <div class="tab active" id="tab-auth-google" onclick="switchAuthTab('google')">Google</div>
-      <div class="tab" id="tab-auth-email" onclick="switchAuthTab('email')">Email</div>
-    </div>
+    <p class="lead">Sign in with the same Google account you'll use every day. If you already use the Telegram bot, this will let you link that same account to the website — nothing gets duplicated.</p>
+    <button class="btn-primary" onclick="signIn()">Continue with Google</button>
+  </div>
 
-    <div id="pane-auth-google">
-      <p class="lead">Sign in with the same Google account you'll use every day. If you already use the Telegram bot, this will let you link that same account to the website — nothing gets duplicated.</p>
-      <button class="btn-primary" onclick="signIn()">Continue with Google</button>
-    </div>
-
-    <div id="pane-auth-email" style="display:none">
-      <div class="tabs">
-        <div class="tab active" id="tab-email-signup" onclick="switchEmailAuthTab('signup')">Sign up</div>
-        <div class="tab" id="tab-email-signin" onclick="switchEmailAuthTab('signin')">Sign in</div>
-      </div>
-
-      <div id="pane-email-signup">
-        <p class="lead">New here? Enter your access code, pick a password, and you're in — no Google account needed.</p>
-        <input type="email" id="signupEmailInput" placeholder="you@example.com" autocomplete="email" />
-        <input type="password" id="signupPasswordInput" placeholder="Password (min 6 characters)" autocomplete="new-password" />
-        <input type="text" id="signupCodeInput" placeholder="ACC-8X2K1M" autocapitalize="characters" />
-        <button class="btn-primary" onclick="submitEmailSignup()">Create account</button>
-        <p class="error" id="signupError"></p>
-        <p class="muted" id="signupNotice" style="display:none;font-size:13px;margin-top:8px"></p>
-      </div>
-
-      <div id="pane-email-signin" style="display:none">
-        <p class="lead">Already made an account here with email? Sign in below.</p>
-        <input type="email" id="signinEmailInput" placeholder="you@example.com" autocomplete="email" />
-        <input type="password" id="signinPasswordInput" placeholder="Password" autocomplete="current-password" />
-        <button class="btn-primary" onclick="submitEmailSignin()">Sign in</button>
-        <p class="error" id="signinError"></p>
-      </div>
-    </div>
+  <!-- ===== LOCKED (plan expired — payment reminder + deletion countdown, nothing else) ===== -->
+  <div id="view-locked" class="card" style="text-align:center">
+    <h2 style="color:#e5484d">⚠️ Your plan has expired</h2>
+    <img src="/payments_qr.jpeg" alt="Payment QR code" style="max-width:280px;width:100%;margin:16px auto;border-radius:8px;display:block" />
+    <p class="lead">Scan the QR above to renew, then message the Telegram bot with <code>/paid</code> and a note about your payment.</p>
+    <p class="lead" style="color:#e5484d;font-weight:600">
+      Account and all data will be permanently deleted in <span id="lockedDaysLeft">—</span> if not renewed.
+    </p>
+    <button class="btn-ghost btn-small" onclick="signOut()">Sign out</button>
   </div>
 
   <!-- ===== NEEDS CODE (new signup OR linking existing telegram account) ===== -->
@@ -322,7 +303,6 @@
       </div>
       <button class="icon-btn" onclick="signOut()">Sign out</button>
     </div>
-    <p class="muted" style="text-align:right;margin:-6px 0 8px"><a href="#" onclick="openDeleteModal(); return false;" style="color:var(--red);font-size:12px">Delete account</a></p>
     <p class="muted" id="statusLine" style="margin:-8px 0 14px"></p>
     <div id="upgradeCodeRow" style="margin:-8px 0 14px">
       <a href="#" id="upgradeCodeToggle" onclick="toggleUpgradeCode(); return false;" style="font-size:12px;color:var(--paper-dim)">Have a new code? Enter it here</a>
@@ -361,6 +341,19 @@
           </span>
           <button class="btn-ghost btn-small" style="width:auto;padding:6px 10px" onclick="shiftTaskDay(1)" aria-label="Next day">›</button>
         </div>
+        <div class="row" style="margin-bottom:8px">
+          <input type="text" id="addTaskInput" placeholder="e.g. Do 10 math problems" style="margin-bottom:0" onkeydown="if(event.key==='Enter')addTask()" />
+          <button class="btn-ghost btn-small" id="addTaskBtn" style="flex:0 0 auto;width:auto" onclick="addTask()">Add</button>
+        </div>
+        <div class="hidden" id="taskClarifyBox" style="margin:0 0 10px;padding:10px;border:1px solid var(--border,rgba(255,255,255,0.12));border-radius:8px">
+          <p class="muted" id="taskClarifyQuestion" style="font-size:13px;margin:0 0 8px"></p>
+          <div class="row">
+            <input type="text" id="taskClarifyAnswer" placeholder="Your answer..." style="margin-bottom:0" onkeydown="if(event.key==='Enter')confirmTaskClarify()" />
+            <button class="btn-ghost btn-small" style="flex:0 0 auto;width:auto" onclick="confirmTaskClarify()">OK</button>
+            <button class="btn-ghost btn-small" style="flex:0 0 auto;width:auto" onclick="cancelTaskClarify()">Cancel</button>
+          </div>
+        </div>
+        <p class="error" id="taskAddError" style="font-size:12px;margin:0 0 10px;display:none"></p>
         <div id="taskList"></div>
       </div>
 
@@ -444,7 +437,6 @@
       </div>
       <button class="icon-btn" onclick="signOut()">Sign out</button>
     </div>
-    <p class="muted" style="text-align:right;margin:-6px 0 8px"><a href="#" onclick="openDeleteModal(); return false;" style="color:var(--red);font-size:12px">Delete account</a></p>
     <p class="muted" id="statusLineRoster" style="margin:-8px 0 14px"></p>
     <div class="card" id="rosterList"></div>
   </div>
@@ -469,31 +461,12 @@
     </div>
   </div>
 
-  <!-- ===== DELETE ACCOUNT MODAL ===== -->
-  <!-- Two steps: (1) request a 6-digit code by email — works whether the account was
-       created with Google or with a password, since everyone has an email; (2) enter
-       the code to actually confirm and delete. Nothing is deleted until step 2 succeeds. -->
-  <div id="modal-delete" class="modal-overlay hidden">
+  <!-- ===== DAILY MOTIVATION MODAL (first open of the day only) ===== -->
+  <div id="modal-motivation" class="modal-overlay hidden">
     <div class="modal-card">
-      <h2>Delete account</h2>
-      <div id="pane-delete-warn">
-        <p class="lead">This permanently deletes your account, tasks, goals, and history. This can't be undone.</p>
-        <p class="lead">To confirm it's really you, we'll email a 6-digit code to <b id="deleteEmailLabel"></b>.</p>
-        <p class="error" id="deleteWarnError"></p>
-        <div class="row">
-          <button class="btn-ghost btn-small" onclick="closeDeleteModal()">Cancel</button>
-          <button class="btn-primary" style="background:var(--red)" onclick="sendDeleteOtp()">Send code</button>
-        </div>
-      </div>
-      <div id="pane-delete-otp" style="display:none">
-        <p class="lead">Enter the 6-digit code we just emailed you.</p>
-        <input type="text" id="deleteOtpInput" placeholder="123456" inputmode="numeric" maxlength="6" />
-        <p class="error" id="deleteOtpError"></p>
-        <div class="row">
-          <button class="btn-ghost btn-small" onclick="closeDeleteModal()">Cancel</button>
-          <button class="btn-primary" id="deleteConfirmBtn" style="background:var(--red)" onclick="confirmDeleteAccount()">Confirm & delete</button>
-        </div>
-      </div>
+      <h2>✨ Today's push</h2>
+      <p class="lead" id="motivationBody" style="white-space:pre-wrap"></p>
+      <button class="btn-primary" onclick="closeMotivation()">Let's go</button>
     </div>
   </div>
 </div>
@@ -518,7 +491,6 @@
   const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
   const $ = (id) => document.getElementById(id);
-  let currentUser = null; // set in boot() from GET /me — used by the delete-account flow
   // Apply any locally-remembered theme immediately, before auth/network resolve —
   // corrected against the server value (theme_preference) once /me comes back in boot().
   {
@@ -527,7 +499,14 @@
   }
   const show = (id) => { $(id).classList.remove("view-hidden"); };
   const hide = (id) => { $(id).classList.add("view-hidden"); };
-  const ALL_VIEWS = ["loading","view-signedout","view-needscode","view-dashboard","view-roster"];
+  const ALL_VIEWS = ["loading","view-signedout","view-needscode","view-dashboard","view-roster","view-locked"];
+
+  function renderLockedScreen(lockedAt) {
+    const LOCK_TO_DELETE_DAYS = 30;
+    const deleteAt = new Date(lockedAt).getTime() + LOCK_TO_DELETE_DAYS * 24 * 60 * 60 * 1000;
+    const daysLeft = Math.max(0, Math.ceil((deleteAt - Date.now()) / (24 * 60 * 60 * 1000)));
+    $("lockedDaysLeft").textContent = `${daysLeft} day${daysLeft === 1 ? "" : "s"}`;
+  }
   function showOnly(id){ ALL_VIEWS.forEach(v => v===id ? show(v) : hide(v)); }
 
   async function apiCall(path, options = {}) {
@@ -543,138 +522,6 @@
   };
   window.signOut = async function () {
     await supabase.auth.signOut();
-    currentUser = null;
-    showOnly("view-signedout");
-  };
-
-  window.switchAuthTab = function (which) {
-    $("tab-auth-google").classList.toggle("active", which === "google");
-    $("tab-auth-email").classList.toggle("active", which === "email");
-    $("pane-auth-google").style.display = which === "google" ? "" : "none";
-    $("pane-auth-email").style.display = which === "email" ? "" : "none";
-  };
-
-  window.switchEmailAuthTab = function (which) {
-    $("tab-email-signup").classList.toggle("active", which === "signup");
-    $("tab-email-signin").classList.toggle("active", which === "signin");
-    $("pane-email-signup").style.display = which === "signup" ? "" : "none";
-    $("pane-email-signin").style.display = which === "signin" ? "" : "none";
-  };
-
-  // Email/password sign-up: creates the Supabase Auth user, then redeems the access
-  // code through the SAME /join endpoint the Google flow uses (it only cares about the
-  // signed-in user's id/email, not which provider they used). If this Supabase project
-  // requires email confirmation, signUp() comes back with no session yet — in that case
-  // we stash the code in localStorage and redeem it automatically the moment they first
-  // sign in successfully, instead of asking them to type it twice.
-  window.submitEmailSignup = async function () {
-    const email = $("signupEmailInput").value.trim();
-    const password = $("signupPasswordInput").value;
-    const code = $("signupCodeInput").value.trim();
-    const errEl = $("signupError");
-    const noticeEl = $("signupNotice");
-    errEl.textContent = "";
-    noticeEl.style.display = "none";
-
-    if (!email || !password) { errEl.textContent = "Enter an email and password."; return; }
-    if (password.length < 6) { errEl.textContent = "Password needs to be at least 6 characters."; return; }
-    if (!code) { errEl.textContent = "Enter your access code."; return; }
-
-    const { data, error } = await supabase.auth.signUp({ email, password });
-    if (error) { errEl.textContent = error.message; return; }
-
-    if (!data.session) {
-      localStorage.setItem("stride_pending_code", code);
-      noticeEl.textContent = "Check your email to confirm your account, then come back and sign in below — your code is applied automatically the moment you do.";
-      noticeEl.style.display = "block";
-      switchEmailAuthTab("signin");
-      $("signinEmailInput").value = email;
-      return;
-    }
-
-    const result = await apiCall("/join", { method: "POST", body: JSON.stringify({ code }) });
-    if (result.error) { errEl.textContent = result.error; return; }
-    await boot();
-  };
-
-  window.submitEmailSignin = async function () {
-    const email = $("signinEmailInput").value.trim();
-    const password = $("signinPasswordInput").value;
-    const errEl = $("signinError");
-    errEl.textContent = "";
-    if (!email || !password) { errEl.textContent = "Enter your email and password."; return; }
-
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) { errEl.textContent = error.message; return; }
-
-    const pendingCode = localStorage.getItem("stride_pending_code");
-    if (pendingCode) {
-      localStorage.removeItem("stride_pending_code");
-      await apiCall("/join", { method: "POST", body: JSON.stringify({ code: pendingCode }) }).catch(() => {});
-    }
-    await boot();
-  };
-
-  // ---------- Delete account (email OTP confirmation) ----------
-  // Works the same regardless of whether the account was made with Google or a
-  // password, since both always have an email on file. Step 1 emails a 6-digit code
-  // via Supabase's own OTP system (shouldCreateUser:false so it can't be used to sign
-  // up a new account by accident). Step 2 verifies that code — which also proves it's
-  // really the account owner — then calls the backend to actually delete everything.
-  window.openDeleteModal = function () {
-    if (!currentUser) return;
-    $("deleteEmailLabel").textContent = currentUser.email || "your email";
-    $("deleteWarnError").textContent = "";
-    $("deleteOtpError").textContent = "";
-    $("deleteOtpInput").value = "";
-    $("pane-delete-warn").style.display = "";
-    $("pane-delete-otp").style.display = "none";
-    $("modal-delete").classList.remove("hidden");
-  };
-
-  window.closeDeleteModal = function () {
-    $("modal-delete").classList.add("hidden");
-  };
-
-  window.sendDeleteOtp = async function () {
-    const errEl = $("deleteWarnError");
-    errEl.textContent = "";
-    if (!currentUser?.email) { errEl.textContent = "No email on file for this account."; return; }
-    const { error } = await supabase.auth.signInWithOtp({
-      email: currentUser.email,
-      options: { shouldCreateUser: false },
-    });
-    if (error) { errEl.textContent = error.message; return; }
-    $("pane-delete-warn").style.display = "none";
-    $("pane-delete-otp").style.display = "";
-  };
-
-  window.confirmDeleteAccount = async function () {
-    const code = $("deleteOtpInput").value.trim();
-    const errEl = $("deleteOtpError");
-    errEl.textContent = "";
-    if (!code) { errEl.textContent = "Enter the code from your email."; return; }
-
-    const { error: otpError } = await supabase.auth.verifyOtp({
-      email: currentUser.email, token: code, type: "email",
-    });
-    if (otpError) { errEl.textContent = "That code didn't match — check it and try again."; return; }
-
-    const btn = $("deleteConfirmBtn");
-    btn.disabled = true;
-    btn.textContent = "Deleting…";
-
-    const result = await apiCall("/delete-account", { method: "POST" });
-    if (result.error) {
-      btn.disabled = false;
-      btn.textContent = "Confirm & delete";
-      errEl.textContent = result.error;
-      return;
-    }
-
-    closeDeleteModal();
-    await supabase.auth.signOut();
-    currentUser = null;
     showOnly("view-signedout");
   };
 
@@ -739,9 +586,22 @@
       const row = document.createElement("div");
       row.className = "task";
       row.style.animationDelay = `${listEl.children.length * 45}ms`;
+      const goalBadge = t.goal_id
+        ? `<div class="muted" style="font-size:12px;margin:2px 0 6px">🎯 Goal-linked${t.target_amount ? ` • Target: ${t.target_amount} ${t.target_unit || ""}` : ""}</div>`
+        : "";
       row.innerHTML = `
         <div class="task-title">${t.title}<span class="task-status status-${t.status}">${t.status.replace("_"," ")}</span></div>
+        ${goalBadge}
+        <div class="row" style="margin:2px 0 8px">
+          <button class="btn-ghost btn-small" style="flex:0 0 auto;width:auto" onclick="toggleEvidence(${t.id})" title="Mark done / add evidence">✅ Done</button>
+          <button class="btn-ghost btn-small" style="flex:0 0 auto;width:auto" onclick="markTaskNotDone(${t.id})" title="Mark not done">❌ Not done</button>
+        </div>
         <div class="evidence-box hidden" id="ev-${t.id}">
+          ${t.verification_question ? `
+          <p class="muted" id="ev-verify-label-${t.id}" style="font-size:13px;margin:0 0 6px">🤔 ${t.verification_question}</p>
+          <input type="text" id="ev-verify-${t.id}" placeholder="Your answer..." style="margin-bottom:8px" />` : ""}
+          ${t.target_amount ? `
+          <input type="number" id="ev-amount-${t.id}" placeholder="How many ${t.target_unit || "units"} did you complete? (target: ${t.target_amount})" style="margin-bottom:8px" />` : ""}
           <div class="evidence-tabs">
             <div class="evidence-tab active" id="etab-text-${t.id}" onclick="switchEvidenceTab(${t.id},'text')">Text</div>
             <div class="evidence-tab" id="etab-photo-${t.id}" onclick="switchEvidenceTab(${t.id},'photo')">Photo</div>
@@ -771,11 +631,98 @@
 
           <div class="saved-tag hidden" id="ev-saved-${t.id}">Saved — reviewed each morning.</div>
         </div>
-        <button class="btn-ghost btn-small" onclick="toggleEvidence(${t.id})">Add evidence</button>
       `;
       listEl.appendChild(row);
     });
   }
+
+  // ---------- Adding a task, with the goal-linked clarifying-question flow ----------
+  let pendingTaskClarify = null; // { title, goalId, goalTitle, question }
+
+  window.addTask = async function () {
+    const input = $("addTaskInput");
+    const title = input.value.trim();
+    if (!title) return;
+    const btn = $("addTaskBtn");
+    const errEl = $("taskAddError");
+    errEl.style.display = "none";
+    btn.disabled = true;
+    btn.textContent = "Checking…";
+
+    let result;
+    try {
+      result = await apiCall("/task", { method: "POST", body: JSON.stringify({ title }) });
+    } catch (err) {
+      result = { error: "Couldn't reach the server — try again." };
+    }
+
+    btn.disabled = false;
+    btn.textContent = "Add";
+
+    if (result.error) {
+      errEl.textContent = result.error;
+      errEl.style.display = "block";
+      return;
+    }
+
+    if (result.needsClarification) {
+      pendingTaskClarify = { title, goalId: result.goalId, goalTitle: result.goalTitle, question: result.question };
+      $("taskClarifyQuestion").textContent = `🎯 This looks related to your goal "${result.goalTitle}" — ${result.question}`;
+      $("taskClarifyBox").classList.remove("hidden");
+      $("taskClarifyAnswer").value = "";
+      $("taskClarifyAnswer").focus();
+      return;
+    }
+
+    input.value = "";
+    loadTasksForDate(viewedTaskDate).catch(() => {});
+  };
+
+  window.confirmTaskClarify = async function () {
+    if (!pendingTaskClarify) return;
+    const answer = $("taskClarifyAnswer").value.trim();
+    if (!answer) return;
+    const questionEl = $("taskClarifyQuestion");
+    const originalQ = questionEl.textContent;
+    questionEl.textContent = "💭 Building your plan…";
+
+    let result;
+    try {
+      result = await apiCall("/task/confirm", {
+        method: "POST",
+        body: JSON.stringify({
+          title: pendingTaskClarify.title, goalId: pendingTaskClarify.goalId,
+          question: pendingTaskClarify.question, answer,
+        }),
+      });
+    } catch (err) {
+      result = { error: "Couldn't reach the server — try again." };
+    }
+
+    $("taskClarifyBox").classList.add("hidden");
+    questionEl.textContent = originalQ;
+
+    if (result.error) {
+      $("taskAddError").textContent = result.error;
+      $("taskAddError").style.display = "block";
+      return;
+    }
+
+    $("addTaskInput").value = "";
+    pendingTaskClarify = null;
+    loadTasksForDate(viewedTaskDate).catch(() => {});
+  };
+
+  window.cancelTaskClarify = function () {
+    pendingTaskClarify = null;
+    $("taskClarifyBox").classList.add("hidden");
+  };
+
+  window.markTaskNotDone = async function (taskId) {
+    if (!confirm("Mark this task as not done?")) return;
+    await apiCall("/task/skip", { method: "POST", body: JSON.stringify({ taskId }) });
+    loadTasksForDate(viewedTaskDate).catch(() => {});
+  };
 
   window.toggleEvidence = function (taskId) {
     $(`ev-${taskId}`).classList.toggle("hidden");
@@ -788,18 +735,37 @@
     });
   };
 
+  // Reads the optional verification-answer / reported-amount inputs for a task, if the
+  // evidence box rendered them (only present when the task has a verification_question
+  // and/or target_amount — see renderTasks/goalRowHtml above).
+  function readEvidenceExtras(taskId) {
+    const extras = {};
+    const verifyEl = document.getElementById(`ev-verify-${taskId}`);
+    if (verifyEl && verifyEl.value.trim()) extras.verificationAnswer = verifyEl.value.trim();
+    const amountEl = document.getElementById(`ev-amount-${taskId}`);
+    if (amountEl && amountEl.value !== "") extras.reportedAmount = Number(amountEl.value);
+    return extras;
+  }
+
   window.submitTextEvidence = async function (taskId) {
     const textContent = $(`ev-text-${taskId}`).value.trim();
     if (!textContent) return;
     const result = await apiCall("/evidence", {
       method: "POST",
-      body: JSON.stringify({ taskId, evidenceType: "text", textContent }),
+      body: JSON.stringify({ taskId, evidenceType: "text", textContent, ...readEvidenceExtras(taskId) }),
     });
-    if (result.saved) markSaved(taskId, () => { $(`ev-text-${taskId}`).value = ""; });
+    if (result.saved) markSaved(taskId, () => { $(`ev-text-${taskId}`).value = ""; }, result);
   };
 
-  function markSaved(taskId, cleanup) {
-    $(`ev-saved-${taskId}`).classList.remove("hidden");
+  function markSaved(taskId, cleanup, result) {
+    const tag = $(`ev-saved-${taskId}`);
+    if (result && result.provisionalStatus) {
+      const labels = { completed: "✅ Looks fully done", partial: `🟡 Looks partial (${result.provisionalPct}%)`, not_completed: "Looks like it's not done yet" };
+      tag.textContent = `${labels[result.provisionalStatus] || "Saved"} — final review each morning.`;
+    } else {
+      tag.textContent = "Saved — reviewed each morning.";
+    }
+    tag.classList.remove("hidden");
     if (cleanup) cleanup();
   }
 
@@ -882,10 +848,10 @@
       const fileData = await fileToBase64(fileOrBlob);
       const result = await apiCall("/evidence", {
         method: "POST",
-        body: JSON.stringify({ taskId, evidenceType: kind, fileData, mimeType }),
+        body: JSON.stringify({ taskId, evidenceType: kind, fileData, mimeType, ...readEvidenceExtras(taskId) }),
       });
       if (result.saved) {
-        markSaved(taskId);
+        markSaved(taskId, null, result);
         submitBtn.textContent = kind === "photo" ? "Submit photo" : "Submit voice note";
       } else {
         alert(result.error || "Upload failed.");
@@ -997,6 +963,9 @@
     ["📋", "Today", "Your tasks for today. New ones are picked for you automatically each morning — you don't add these yourself."],
     ["●", "The dots up top", "One dot per task. It fills in green as you complete tasks, so you can see your progress at a glance."],
     ["✍️", "Add evidence", "Tap this on any task to show you did it — as text, a photo, or a voice note. Pick whichever's easiest for that task."],
+    ["🎯", "Goals", "Ongoing goals rather than one-day tasks — type one in, or record a voice note about it, and you'll get an AI-built plan and a motivation line for it."],
+    ["💬", "Type a message", "Anything you type or say here can add a task or a goal, or just ask a question — no need to use exact wording."],
+    ["🧑‍🤝‍🧑", "Friends", "Add friends by code or email to see each other's streaks and stay accountable together."],
     ["🔔", "The bell", "Turns on notifications, so you get a nudge here even when you're not checking Telegram."],
     ["✅", "Review timing", "Evidence isn't graded instantly — it's reviewed together each morning, and the task's status updates then."],
   ];
@@ -1018,6 +987,15 @@
       </div>`).join("");
     if (user) $("welcomeStatus").textContent = statusText(user);
   }
+
+  window.showMotivation = function (text) {
+    if (!text) return;
+    $("motivationBody").textContent = text;
+    $("modal-motivation").classList.remove("hidden");
+  };
+  window.closeMotivation = function () {
+    $("modal-motivation").classList.add("hidden");
+  };
 
   window.showWelcome = function () {
     $("modal-welcome").classList.remove("hidden");
@@ -1188,9 +1166,14 @@
 
     const me = await apiCall("/me");
     if (me.error) { showOnly("view-needscode"); return; }
-    currentUser = me.user;
 
     applyTheme(me.user.theme_preference === "light" ? "light" : "dark", false);
+
+    if (me.user.is_locked && me.user.locked_at) {
+      renderLockedScreen(me.user.locked_at);
+      showOnly("view-locked");
+      return;
+    }
 
     const rosterRoles = ["teacher", "principal", "manager", "admin"];
     if (rosterRoles.includes(me.user.account_role)) {
@@ -1207,6 +1190,7 @@
       renderStatusLine(me.user);
       await refreshBellState();
       maybeAutoShowWelcome(me.user.account_role, me.user);
+      showMotivation(me.motivationSpeech);
       loadFriends().catch((err) => console.error("Friends load failed:", err));
       loadGoals().catch((err) => console.error("Goals load failed:", err));
     }
@@ -1393,7 +1377,7 @@
 
   window.addGoal = async function () {
     const title = $("addGoalInput").value.trim();
-    if (!title) return;
+    if (!title && !pendingGoalFile && !pendingGoalVoice) return;
     const body = { title };
     if (pendingGoalFile) {
       body.fileData = pendingGoalFile.fileData;
@@ -1472,6 +1456,22 @@
           <button class="btn-ghost btn-small" style="width:auto;padding:6px 12px" onclick="respondFriendRequest(${r.id},'decline')">Decline</button>
         </span>
       </div>`).join("");
+
+    // Pop up a toast for any request we haven't already announced — so a new request
+    // is noticed right away instead of only being visible if you scroll to Friends.
+    let seen = [];
+    try { seen = JSON.parse(localStorage.getItem("seenFriendRequestIds") || "[]"); } catch {}
+    const fresh = requests.filter(r => !seen.includes(r.id));
+    if (fresh.length) {
+      const toast = $("friendRequestToast");
+      const text = fresh.length === 1
+        ? `${fresh[0].from_name} sent you a friend request`
+        : `${fresh.length} new friend requests`;
+      toast.textContent = `👋 ${text}`;
+      toast.classList.remove("hidden");
+      setTimeout(() => toast.classList.add("hidden"), 6000);
+      localStorage.setItem("seenFriendRequestIds", JSON.stringify(requests.map(r => r.id)));
+    }
   }
 
   function renderFriendsList(friends) {
